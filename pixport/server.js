@@ -112,8 +112,9 @@ function uploadPage(token, folderName) {
   .top { width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; }
   .logo { font-size:13px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
   #themeBtn {
-    width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
-    background:var(--card); font-size:18px; cursor:pointer;
+    width:38px; height:38px; aspect-ratio:1/1; padding:0; flex:0 0 auto;
+    border-radius:50%; border:1px solid var(--line); overflow:hidden;
+    background:var(--card); font-size:17px; cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center; line-height:1;
     box-shadow:var(--shadow);
   }
@@ -255,8 +256,9 @@ function qrPage(token, folder) {
   .top { width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; }
   .logo { font-size:12px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
   #themeBtn {
-    width:36px; height:36px; border-radius:50%; border:1px solid var(--line);
-    background:var(--card); font-size:17px; cursor:pointer;
+    width:36px; height:36px; aspect-ratio:1/1; padding:0; flex:0 0 auto;
+    border-radius:50%; border:1px solid var(--line); overflow:hidden;
+    background:var(--card); font-size:16px; cursor:pointer;
     display:inline-flex; align-items:center; justify-content:center; line-height:1;
     box-shadow:var(--shadow);
   }
@@ -561,7 +563,7 @@ body{margin:0;font-family:system-ui;background:var(--bg);color:var(--ink);min-he
 display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center;overflow:hidden}
 .top{width:100%;max-width:380px;display:flex;align-items:center;justify-content:space-between}
 .logo{font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--brand);font-weight:800}
-#themeBtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:17px;cursor:pointer;box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;line-height:1}
+#themeBtn{width:36px;height:36px;aspect-ratio:1/1;padding:0;flex:0 0 auto;border-radius:50%;border:1px solid var(--line);overflow:hidden;background:var(--card);font-size:16px;cursor:pointer;box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;line-height:1}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:var(--shadow);max-width:380px}
 h2{font-size:20px;margin:0}p{color:var(--muted);font-size:14px;margin:0;max-width:340px;line-height:1.5}
 button{font-size:16px;font-weight:700;padding:14px 26px;border-radius:14px;border:0;
