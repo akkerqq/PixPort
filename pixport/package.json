@@ -8,6 +8,7 @@
     "server": "node server.js",
     "test": "node test.js",
     "build": "node build.js",
+    "build:native": "g++ -O2 -static -static-libgcc -static-libstdc++ -o native/hotkey-helper.exe native/hotkey-helper.cpp -lole32 -loleaut32 -luuid -lshell32 && strip native/hotkey-helper.exe",
     "menu": "node install.js",
     "menu:off": "node install.js uninstall"
   },

@@ -179,7 +179,8 @@ async function onHotkey() {
     diag('хоткей: папка =', d.path || 'НЕ НАЙДЕНА',
          '| активное окно =', (d.proc || '?') + ' «' + (d.title || '') + '»',
          '| класс =', d.cls, '| hwnd =', d.hwnd,
-         '| окон у Shell =', d.seen, '| err =', d.err || 'нет');
+         '| окон у Shell =', d.seen, '| err =', d.err || 'нет',
+         '| ' + (d.ms || 0) + 'мс via=' + (d.via || '?'));
     showWindow();
     // папка не распознана — окно просто выходит вперёд, выбор сохраняем
     if (d.path && win) win.loadURL(qrUrl(d.path));

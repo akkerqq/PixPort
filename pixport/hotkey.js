@@ -16,10 +16,43 @@
  * в кодовой странице — через файл этот геморрой обходится полностью.
  */
 
-const { execFile } = require('child_process');
+const { execFile, execFile: execFileCb } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
+/**
+ * Нативный хелпер (native/hotkey-helper.exe): тот же опрос проводника
+ * через COM, но без холодного старта PowerShell (~0.03с против 1-2с).
+ * Лежит рядом с кодом и в сборке (asar:false), запускается скрыто.
+ * Нет exe — откатываемся на PowerShell ниже, хоткей всё равно работает.
+ */
+function helperPath() {
+  const p = path.join(__dirname, 'native', 'hotkey-helper.exe');
+  return fs.existsSync(p) ? p : null;
+}
+
+/** Опрос через нативный хелпер. null = хелпера нет или сбой (пробовать PS). */
+function helperQuery() {
+  return new Promise(resolve => {
+    const exe = helperPath();
+    if (!exe) { resolve(null); return; }
+    const t = Date.now();
+    execFileCb(exe, { timeout: 3000, windowsHide: true }, (err, stdout) => {
+      if (err) { resolve(null); return; }
+      try {
+        const o = JSON.parse(String(stdout).trim());
+        if (!o || typeof o !== 'object') { resolve(null); return; }
+        resolve({
+          path: o.path ? String(o.path).trim() || null : null,
+          hwnd: o.hwnd || '', cls: o.cls || '', seen: Number(o.seen) || 0,
+          err: o.err || '', title: o.title || '', proc: o.proc || '',
+          ms: Date.now() - t, via: 'native',
+        });
+      } catch (e) { resolve(null); }
+    }).on('error', () => resolve(null));
+  });
+}
 
 const SCRIPT = `
 $outFile = $env:PIXPORT_FOLDER_OUT
@@ -89,10 +122,17 @@ let counter = 0;
  * Резолвится в string (путь) либо null, если активное окно — не проводник.
  * Никогда не бросает: таймаут и ошибки превращаются в null.
  *
- * raw=true — вернуть всю отладку {path, hwnd, cls, seen, err},
+ * Сначала пробуем нативный хелпер (быстро), при сбое — PowerShell.
+ *
+ * raw=true — вернуть всю отладку {path, hwnd, cls, seen, err, ms, via},
  * чтобы лог показывал, ПОЧЕМУ папка не нашлась, а не просто «пусто».
  */
-function currentExplorerFolder(raw = false) {
+async function currentExplorerFolder(raw = false) {
+  const fast = await helperQuery();
+  if (fast) return raw ? fast : fast.path;
+
+  // фолбэк: хелпера нет или сбой — старый путь через PowerShell
+  const t = Date.now();
   return new Promise(resolve => {
     const outFile = path.join(os.tmpdir(), `pixport-fold-${process.pid}-${++counter}.txt`);
     const b64 = Buffer.from(SCRIPT, 'utf16le').toString('base64');
@@ -110,11 +150,12 @@ function currentExplorerFolder(raw = false) {
       ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-EncodedCommand', b64],
       { env: { ...process.env, PIXPORT_FOLDER_OUT: outFile }, timeout: 6000 },
       () => {
+        const ms = Date.now() - t;
         let text = null;
         try { text = fs.readFileSync(outFile, 'utf8'); } catch (e) {}
 
         if (!text) {
-          finish(raw ? { path: null, hwnd: '', cls: '', seen: 0, err: 'нет файла-ответа', title: '', proc: '' } : null);
+          finish(raw ? { path: null, hwnd: '', cls: '', seen: 0, err: 'нет файла-ответа', title: '', proc: '', ms, via: 'ps' } : null);
           return;
         }
 
@@ -123,15 +164,15 @@ function currentExplorerFolder(raw = false) {
         if (!obj) {
           // старый формат (просто строка) — не роняем из-за этого
           const p = text.trim();
-          finish(raw ? { path: p || null, hwnd: '', cls: '', seen: 0, err: 'не-JSON', title: '', proc: '' } : (p || null));
+          finish(raw ? { path: p || null, hwnd: '', cls: '', seen: 0, err: 'не-JSON', title: '', proc: '', ms, via: 'ps' } : (p || null));
           return;
         }
 
         const folder = obj.path ? String(obj.path).trim() : '';
-        finish(raw ? { ...obj, path: folder || null } : (folder || null));
+        finish(raw ? { ...obj, path: folder || null, ms, via: 'ps' } : (folder || null));
       }
     ).on('error', () => finish(raw
-      ? { path: null, hwnd: '', cls: '', seen: 0, err: 'powershell не запустился', title: '', proc: '' }
+      ? { path: null, hwnd: '', cls: '', seen: 0, err: 'powershell не запустился', title: '', proc: '', ms: Date.now() - t, via: 'ps' }
       : null));
   });
 }

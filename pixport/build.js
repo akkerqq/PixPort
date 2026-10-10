@@ -20,7 +20,12 @@ packager({
     /^\/node_modules\/\.bin($|\/)/,
     /^\/\.git($|\/)/,
     /^\/test\.js$/,
+    /^\/test-.*\.js$/,
     /^\/.*\.log$/,
+    // native: исходники и эксперименты не едут к людям, только готовый exe
+    /^\/native\/.*\.(cpp|ps1)$/,
+    /^\/native\/PixMenu\.dll$/,
+    /^\/native\/test-.*$/,
   ],
   appVersion: '0.1.0',
   win32metadata: {
