@@ -5,12 +5,13 @@
  * перетаскиванием папки в окно или контекстное меню проводника.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { start, PORT, resolveFolder } = require('./server.js');
 const menu = require('./menu.js');
+const { currentExplorerFolder } = require('./hotkey.js');
 
 // диагностика: пишем всё подозрительное в файл (в собранной версии консоли нет)
 const LOG = path.join(os.tmpdir(), 'pixport-diag.log');
@@ -98,11 +99,56 @@ if (!gotLock) {
     createWindow();
     diag('окно создано');
 
+    registerHotkey();
+
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   }).catch(e => diag('ОШИБКА старта:', e.stack || e.message));
 }
 
-app.on('window-all-closed', () => { app.quit(); });
+/* --- горячая клавиша: Ctrl+Alt+Q ---
+ * Быстрее любого ПКМ: одна комбинация вместо «правый клик → показать
+ * доп. параметры → пункт». Папку берём у того окна проводника,
+ * которое прямо сейчас в фокусе; если в фокусе не проводник —
+ * просто показываем окно, папку не трогаем (не сбрасываем чужой выбор).
+ */
+const HOTKEY = 'CommandOrControl+Alt+Q';
+
+function registerHotkey() {
+  try {
+    const ok = globalShortcut.register(HOTKEY, onHotkey);
+    diag('хоткей', HOTKEY, ok ? 'зарегистрирован' : 'НЕ ЗАРЕГИСТРИРОВАН (занят?)');
+    if (!ok) diag('возможно, комбинация занята другой программой');
+  } catch (e) {
+    diag('ошибка хоткея:', e.stack || e.message);
+  }
+}
+
+async function onHotkey() {
+  try {
+    const d = await currentExplorerFolder(true);
+    diag('хоткей: папка =', d.path || 'НЕ НАЙДЕНА',
+         '| активное окно =', (d.proc || '?') + ' «' + (d.title || '') + '»',
+         '| класс =', d.cls, '| hwnd =', d.hwnd,
+         '| окон у Shell =', d.seen, '| err =', d.err || 'нет');
+    if (!win) createWindow();
+    win.show();
+    win.focus();
+    // папка не распознана — окно просто выходит вперёд, выбор сохраняем
+    if (d.path) win.loadURL(qrUrl(d.path));
+  } catch (e) {
+    diag('ошибка хоткея при выполнении:', e.stack || e.message);
+  }
+}
+
+app.on('will-quit', () => globalShortcut.unregisterAll());
+
+app.on('window-all-closed', () => {
+  diag('окно закрыто -> ухожу. ВНИМАНИЕ: хоткей перестанет работать, пока программа не запущена');
+  app.quit();
+});
+
+// почему приложение вообще завершилось
+app.on('quit', (e, code) => diag('quit, код =', code));
 
 /* --- мост из окна в систему --- */
 
