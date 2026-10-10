@@ -103,6 +103,7 @@ function uploadPage(token, folderName) {
     --ok:#9fe6b4; --err:#ff9c9c; --shadow:0 12px 40px rgba(0,0,0,.45);
   }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  *, *::before, *::after { transition:background-color .3s ease, color .3s ease, border-color .3s ease, box-shadow .3s ease; }
   body {
     min-height:100dvh; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     background:var(--bg); color:var(--ink);
@@ -247,6 +248,7 @@ function qrPage(token, folder) {
     --qr-glow:0 12px 50px rgba(60,80,255,.35);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
+  *, *::before, *::after { transition:background-color .3s ease, color .3s ease, border-color .3s ease, box-shadow .3s ease; }
   body {
     min-height:100vh; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     background:var(--bg); color:var(--ink);
@@ -558,6 +560,7 @@ async function handleRequest(req, res) {
 :root{color-scheme:light;--bg:#f2f4fb;--card:#fff;--ink:#181b2e;--muted:#6d7394;--line:#e3e7f4;--brand:#3d52f0;--brand-ink:#fff;--soft:#edf0ff;--ok:#1d9e57;--err:#cf3a3a;--shadow:0 10px 30px rgba(35,45,110,.10)}
 [data-theme="dark"]{color-scheme:dark;--bg:#0b1026;--card:#101637;--ink:#eef1ff;--muted:#8b93c7;--line:#232c60;--brand:#3d52f0;--brand-ink:#fff;--soft:#1b2350;--ok:#9fe6b4;--err:#ff9c9c;--shadow:0 12px 40px rgba(0,0,0,.45)}
 *{margin:0;padding:0;box-sizing:border-box}
+*,*::before,*::after{transition:background-color .3s ease,color .3s ease,border-color .3s ease,box-shadow .3s ease}
 html,body{height:100%}
 body{margin:0;font-family:system-ui;background:var(--bg);color:var(--ink);min-height:100vh;
 display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center;overflow:hidden}
