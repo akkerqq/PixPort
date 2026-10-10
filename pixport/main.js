@@ -5,7 +5,7 @@
  * перетаскиванием папки в окно или контекстное меню проводника.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut, Tray, Menu, Notification, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -21,8 +21,17 @@ function diag(...a) {
 diag('--- старт ---', 'argv =', JSON.stringify(process.argv), 'execPath =', process.execPath);
 
 let win = null;
+let tray = null;
+let quitting = false; // true только когда выходим по-настоящему (трей -> Выйти)
+let trayNotified = false;
 
 const appDir = __dirname; // папка приложения (dev: pixport, packed: resources/app)
+
+/** Иконка для трея и окна: assets/icon.png, рядом с main.js. */
+function iconPath() {
+  const p = path.join(appDir, 'assets', 'icon.png');
+  return fs.existsSync(p) ? p : null;
+}
 
 /**
  * Достать путь к папке из аргументов запуска.
@@ -38,6 +47,34 @@ function folderFromArgv(argv) {
     if (abs && abs !== appAbs) return abs; // саму папку приложения не считаем
   }
   return null;
+}
+
+/** Трей: иконка рядом с часами, окно можно закрыть — программа живёт. */
+function createTray() {
+  if (tray) return;
+  try {
+    const ip = iconPath();
+    const img = ip ? nativeImage.createFromPath(ip) : nativeImage.createEmpty();
+    tray = new Tray(img);
+    tray.setToolTip('PixPort — Ctrl+Alt+Q для QR');
+    const ctx = Menu.buildFromTemplate([
+      { label: 'Показать PixPort', click: () => { if (!win) createWindow(); win.show(); win.focus(); } },
+      { type: 'separator' },
+      { label: 'Выйти', click: () => { quitting = true; app.quit(); } },
+    ]);
+    tray.setContextMenu(ctx);
+    tray.on('click', () => { if (!win) createWindow(); win.show(); win.focus(); });
+    diag('трей создан');
+  } catch (e) {
+    diag('трей НЕ создан:', e.stack || e.message);
+  }
+}
+
+function showWindow() {
+  if (!win) createWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 }
 
 /** Ссылка на окно QR для конкретной папки. */
@@ -64,6 +101,21 @@ function createWindow() {
   });
 
   win.loadURL(qrUrl(folderFromArgv(process.argv)));
+
+  const ip = iconPath();
+  if (ip) { try { win.setIcon(ip); } catch (e) {} }
+
+  // закрыть окно = свернуть в трей, хоткей продолжает жить
+  win.on('close', e => {
+    if (quitting) return;
+    e.preventDefault();
+    win.hide();
+    diag('окно скрыто в трей, хоткей жив');
+    if (!trayNotified && Notification.isSupported()) {
+      trayNotified = true;
+      try { new Notification({ title: 'PixPort', body: 'Свёрнуто в трей. Ctrl+Alt+Q продолжает работать.' }).show(); } catch (err) {}
+    }
+  });
   win.on('closed', () => { win = null; });
 
   // что реально происходит с загрузкой страницы
@@ -85,17 +137,15 @@ if (!gotLock) {
   app.on('second-instance', (ev, argv) => {
     // приложение уже запущено — просто подсвети окно и открыть папку
     const folder = folderFromArgv(argv);
-    if (win) {
-      win.show();
-      win.focus();
-      if (folder) win.loadURL(qrUrl(folder));
-    }
+    showWindow();
+    if (folder && win) win.loadURL(qrUrl(folder));
   });
 
   app.whenReady().then(async () => {
     diag('whenReady, начинаю сервер');
     const r = await start({ openBrowser: false });
     diag('старт сервера:', r);
+    createTray();
     createWindow();
     diag('окно создано');
 
@@ -130,11 +180,9 @@ async function onHotkey() {
          '| активное окно =', (d.proc || '?') + ' «' + (d.title || '') + '»',
          '| класс =', d.cls, '| hwnd =', d.hwnd,
          '| окон у Shell =', d.seen, '| err =', d.err || 'нет');
-    if (!win) createWindow();
-    win.show();
-    win.focus();
+    showWindow();
     // папка не распознана — окно просто выходит вперёд, выбор сохраняем
-    if (d.path) win.loadURL(qrUrl(d.path));
+    if (d.path && win) win.loadURL(qrUrl(d.path));
   } catch (e) {
     diag('ошибка хоткея при выполнении:', e.stack || e.message);
   }
@@ -142,9 +190,12 @@ async function onHotkey() {
 
 app.on('will-quit', () => globalShortcut.unregisterAll());
 
+app.on('before-quit', () => { quitting = true; });
+
+// Все окна закрыты/скрыты — НЕ выходим: живём в трее ради хоткея.
+// Выход только через трей -> Выйти.
 app.on('window-all-closed', () => {
-  diag('окно закрыто -> ухожу. ВНИМАНИЕ: хоткей перестанет работать, пока программа не запущена');
-  app.quit();
+  diag('все окна скрыты — живу в трее, хоткей активен');
 });
 
 // почему приложение вообще завершилось
