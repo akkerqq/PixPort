@@ -218,6 +218,7 @@ function qrPage(token, folder) {
     <button onclick="closeQr()">Закрыть</button>
     <button onclick="openFolder()">Открыть папку</button>
     <button id="pickBtn" style="display:none" onclick="pickFolder()">Сменить папку</button>
+    <button id="menuBtn" style="display:none" onclick="toggleMenu()">В меню проводника</button>
   </div>
   <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
   <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
@@ -230,6 +231,42 @@ const desktop = !!window.pixport;
 if (desktop) {
   document.getElementById('pickBtn').style.display = '';
   document.getElementById('dropHint').style.display = '';
+  document.getElementById('menuBtn').style.display = '';
+  refreshMenuBtn();
+}
+
+// --- пункт в контекстном меню проводника ---
+async function refreshMenuBtn() {
+  const b = document.getElementById('menuBtn');
+  const on = await window.pixport.menuStatus();
+  b.textContent = on ? 'Убрать из меню' : 'В меню проводника';
+  b.style.borderColor = on ? '#3d7a52' : '#37429a';
+}
+
+async function toggleMenu() {
+  const b = document.getElementById('menuBtn');
+  const removing = b.textContent.includes('Убрать'); // запоминаем ДО смены текста
+  b.disabled = true;
+  b.textContent = 'Секунду…';
+  try {
+    const r = await (removing ? window.pixport.menuRemove() : window.pixport.menuInstall());
+    const st = document.getElementById('status');
+    if (r && r.ok) {
+      st.className = 'status';
+      st.innerHTML = removing
+        ? 'Пункт убран из контекстного меню'
+        : '✓ Готово: правый клик по папке → <b>Показать QR</b>';
+    } else {
+      st.className = 'status';
+      st.style.color = '#ff9c9c';
+      st.textContent = 'Не получилось: ' + ((r && r.error) || 'неизвестно');
+      setTimeout(() => { st.style.color = ''; }, 4000);
+    }
+  } catch (e) {
+    document.getElementById('status').textContent = 'Ошибка: ' + e.message;
+  }
+  b.disabled = false;
+  await refreshMenuBtn();
 }
 
 async function refresh() {
@@ -433,12 +470,34 @@ background:#3d52f0;color:#fff;cursor:pointer}button:active{transform:scale(.97)}
 <h2>Выбери папку для фото</h2>
 <p>Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
 <button id="b">📁 Выбрать папку</button>
+<button id="mb" style="display:none;background:#232c60;border:1px solid #37429a;font-size:14px;padding:10px 20px">В меню проводника</button>
+<div id="ms" style="color:#9fe6b4;font-size:13px;min-height:18px"></div>
 <script>
 if (window.pixport) {
   document.getElementById('b').onclick = async () => {
     const p = await window.pixport.pickFolder();
     if (p) location.href = '/?folder=' + encodeURIComponent(p);
   };
+
+  // пункт контекстного меню
+  const mb = document.getElementById('mb'), ms = document.getElementById('ms');
+  mb.style.display = '';
+  async function sync() {
+    const on = await window.pixport.menuStatus();
+    mb.textContent = on ? 'Убрать из меню проводника' : 'В меню проводника';
+  }
+  mb.onclick = async () => {
+    const removing = mb.textContent.includes('Убрать'); // запоминаем ДО смены текста
+    mb.disabled = true; mb.textContent = 'Секунду…';
+    const r = removing ? await window.pixport.menuRemove() : await window.pixport.menuInstall();
+    ms.textContent = r && r.ok
+      ? (removing ? 'Пункт убран' : '✓ Готово: правый клик по любой папке → Показать QR')
+      : 'Не получилось: ' + ((r && r.error) || 'неизвестно');
+    ms.style.color = r && r.ok ? '#9fe6b4' : '#ff9c9c';
+    mb.disabled = false; sync();
+  };
+  sync();
+
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', async e => {
     e.preventDefault();

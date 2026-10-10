@@ -10,5 +10,9 @@ contextBridge.exposeInMainWorld('pixport', {
   dropPath: p => ipcRenderer.invoke('path-from-drop', p),
   /** Реальный путь файла из события drag&drop. */
   pathForFile: f => { try { return webUtils.getPathForFile(f); } catch { return null; } },
+  /** Контекстное меню проводника. */
+  menuStatus: () => ipcRenderer.invoke('menu-status'),
+  menuInstall: () => ipcRenderer.invoke('menu-install'),
+  menuRemove: () => ipcRenderer.invoke('menu-remove'),
   isDesktop: true,
 });

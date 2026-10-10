@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { start, PORT, resolveFolder } = require('./server.js');
+const menu = require('./menu.js');
 
 // диагностика: пишем всё подозрительное в файл (в собранной версии консоли нет)
 const LOG = path.join(os.tmpdir(), 'pixport-diag.log');
@@ -127,3 +128,15 @@ ipcMain.handle('path-from-drop', (e, filePath) => {
   if (abs && win) win.loadURL(qrUrl(abs));
   return abs;
 });
+
+/* --- контекстное меню проводника --- */
+
+// куда ставить пункт: в dev — electron.exe + папка приложения, в сборке — сам exe
+function menuTarget() {
+  const devElectron = path.join(appDir, 'node_modules', 'electron', 'dist', 'electron.exe');
+  return fs.existsSync(devElectron) ? { exe: devElectron, appDir } : { exe: process.execPath };
+}
+
+ipcMain.handle('menu-status', () => menu.isInstalled());
+ipcMain.handle('menu-install', () => { try { return menu.install(menuTarget()); } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('menu-remove', () => { try { return menu.uninstall(); } catch (e) { return { ok: false, error: e.message }; } });
