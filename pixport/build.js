@@ -26,6 +26,16 @@ packager({
     /^\/native\/.*\.(cpp|ps1)$/,
     /^\/native\/PixMenu\.dll$/,
     /^\/native\/test-.*$/,
+    /^\/installer\.iss$/,
+    /^\/make-ico\.js$/,
+    // оптимизация веса: локали Chromium кроме русской (~48 МБ),
+    // текст лицензий Chromium (~20 МБ) — GPL-текст хранится рядом, не внутри exe
+    /^\/locales\/(?!ru\.pak$).*/,
+    /^\/LICENSES\.chromium\.html$/,
+    // sharp: исходники C++ и скрипты установки не нужны в собранной версии,
+    // работает только prebuilt .node
+    /^\/node_modules\/sharp\/(src|install|vendor|include)(\/|$)/,
+    /^\/node_modules\/.*\/(test|tests|docs|example|examples)(\/|$)/,
   ],
   appVersion: '0.1.0',
   win32metadata: {
@@ -35,6 +45,25 @@ packager({
   },
 })
   .then(paths => {
+    // Locales и LICENSES.chromium.html приезжают из дистрибутива Electron,
+    // а не из нашей папки — ignore их не видит, вычищаем после упаковки.
+    for (const out of paths) {
+      const loc = require('path').join(out, 'locales');
+      const fs2 = require('fs');
+      if (fs2.existsSync(loc)) {
+        for (const f of fs2.readdirSync(loc)) {
+          if (f !== 'ru.pak') fs2.rmSync(require('path').join(loc, f), { force: true });
+        }
+      }
+      const lic = require('path').join(out, 'LICENSES.chromium.html');
+      if (fs2.existsSync(lic)) fs2.rmSync(lic, { force: true });
+      // Компилятор шейдеров DirectX (~26 МБ): наше приложение — обычный HTML,
+      // без WebGL. Проверено на собранной версии: окно, трей, хоткей — всё живо.
+      for (const f of ['dxcompiler.dll', 'dxil.dll']) {
+        const p = require('path').join(out, f);
+        if (fs2.existsSync(p)) fs2.rmSync(p, { force: true });
+      }
+    }
     console.log('\n✓ Собрано:\n  ' + paths.join('\n  '));
   })
   .catch(err => {
