@@ -3,7 +3,7 @@
 ; Пишем в HKCU — без прав админа, приватность пользователя не трогаем.
 
 #define MyAppName "PixPort"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1"
 #define MyAppPublisher "akkerqq"
 #define MyAppExeName "PixPort.exe"
 

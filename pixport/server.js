@@ -24,6 +24,7 @@ const Busboy = require('busboy');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
+const APP_VERSION = '0.1.1'; // видна в окне — по ней проверяем, та ли сборка
 const TOKEN_TTL = 30 * 60 * 1000; // 30 минут — жёсткий предел жизни QR
 
 /** Активные сессии: token -> { folder, created, received, closed } */
@@ -357,6 +358,7 @@ function qrPage(token, folder, net) {
   </div>
   <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
   ${netHint}
+  <div class="hint">PixPort v${APP_VERSION}</div>
   <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
   </div>
   <button class="helpLink" onclick="openHelp()">Как пользоваться</button>
@@ -671,6 +673,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
 <button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">В меню проводника</button>
 <div id="ms" style="color:var(--ok);font-size:13px;min-height:18px;margin-top:8px"></div>
+<div style="font-size:11px;color:var(--muted);margin-top:6px">PixPort v${APP_VERSION}</div>
 <div style="text-align:right;margin-top:14px"><button id="setOk" style="font-size:14px">Готово</button></div>
 </div>
 </div>
