@@ -88,44 +88,73 @@ function uploadPage(token, folderName) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PixPort — ${title}</title>
+<script>(function(){try{var t=localStorage.getItem('pixport-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <style>
+  :root {
+    color-scheme:light;
+    --bg:#f2f4fb; --card:#ffffff; --ink:#181b2e; --muted:#6d7394;
+    --line:#e3e7f4; --brand:#3d52f0; --brand-ink:#fff; --soft:#edf0ff;
+    --ok:#1d9e57; --err:#cf3a3a; --shadow:0 10px 30px rgba(35,45,110,.10);
+  }
+  [data-theme="dark"] {
+    color-scheme:dark;
+    --bg:#0b1026; --card:#101637; --ink:#eef1ff; --muted:#8b93c7;
+    --line:#232c60; --brand:#3d52f0; --brand-ink:#fff; --soft:#1b2350;
+    --ok:#9fe6b4; --err:#ff9c9c; --shadow:0 12px 40px rgba(0,0,0,.45);
+  }
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   body {
     min-height:100dvh; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:linear-gradient(160deg,#0b1026 0%,#131a3d 100%); color:#eef1ff;
+    background:var(--bg); color:var(--ink);
     display:flex; flex-direction:column; align-items:center;
-    padding:calc(env(safe-area-inset-top) + 24px) 20px calc(env(safe-area-inset-bottom) + 24px);
+    padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 24px);
   }
-  .logo { font-size:13px; letter-spacing:4px; text-transform:uppercase; color:#7f8cff; font-weight:700; }
+  .top { width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; }
+  .logo { font-size:13px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
+  #themeBtn {
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
+    background:var(--card); font-size:18px; cursor:pointer; line-height:1;
+    box-shadow:var(--shadow);
+  }
+  .card {
+    margin-top:16px; width:100%; max-width:420px; background:var(--card);
+    border:1px solid var(--line); border-radius:22px; padding:22px 20px;
+    box-shadow:var(--shadow); text-align:center;
+  }
   .folder {
-    margin-top:14px; font-size:20px; font-weight:800; text-align:center;
-    background:#1b2350; border:1px solid #2e3a7d; padding:10px 18px; border-radius:14px;
-    max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    margin-top:12px; font-size:19px; font-weight:800;
+    background:var(--soft); border:1px solid var(--line);
+    padding:12px 16px; border-radius:14px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .hint { margin-top:10px; font-size:13px; color:#8b93c7; text-align:center; }
-  .btns { margin-top:28px; width:100%; max-width:420px; display:flex; flex-direction:column; gap:12px; }
+  .hint { margin-top:10px; font-size:13px; color:var(--muted); }
+  .btns { margin-top:20px; width:100%; display:flex; flex-direction:column; gap:12px; }
   label.btn {
     display:flex; align-items:center; justify-content:center; gap:10px;
-    background:#3d52f0; color:#fff; font-size:18px; font-weight:700;
-    padding:18px; border-radius:16px; cursor:pointer; transition:transform .08s;
+    background:var(--brand); color:var(--brand-ink); font-size:18px; font-weight:700;
+    padding:18px; border-radius:16px; cursor:pointer; transition:transform .08s, filter .15s;
+    border:0;
   }
   label.btn:active { transform:scale(.97); }
-  label.btn.alt { background:#232c60; border:1px solid #37429a; }
+  label.btn.alt { background:var(--soft); color:var(--ink); border:1px solid var(--line); }
   label.btn input { display:none; }
   #status {
-    margin-top:22px; min-height:56px; width:100%; max-width:420px;
-    background:#101637; border:1px solid #232c60; border-radius:14px;
-    padding:14px 16px; font-size:15px; color:#9fe6b4; text-align:center;
-    display:none;
+    margin-top:16px; width:100%; background:var(--card); border:1px solid var(--line);
+    border-radius:14px; padding:14px 16px; font-size:15px; color:var(--ok); text-align:center;
+    display:none; box-shadow:var(--shadow);
   }
-  #status.err { color:#ff9c9c; }
+  #status.err { color:var(--err); }
   #status.show { display:block; }
   .count { font-size:34px; font-weight:800; }
-  .dir { font-size:12px; color:#7f88bd; margin-top:6px; word-break:break-all; }
+  .foot { margin-top:18px; font-size:12px; color:var(--muted); }
 </style>
 </head>
 <body>
-  <div class="logo">PixPort</div>
+  <div class="top">
+    <div class="logo">PixPort</div>
+    <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
+  </div>
+  <div class="card">
   <div class="folder">📁 ${title}</div>
   <div class="hint">Фото сразу попадут в папку на компьютере</div>
 
@@ -141,7 +170,22 @@ function uploadPage(token, folderName) {
   </div>
 
   <div id="status"></div>
+  </div>
+  <div class="foot">PixPort · без проводов и мессенджеров</div>
 
+<script>
+function syncThemeBtn() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  document.getElementById('themeBtn').textContent = dark ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  try { localStorage.setItem('pixport-theme', dark ? 'dark' : 'light'); } catch (e) {}
+  syncThemeBtn();
+}
+syncThemeBtn();
+</script>
 <script>
 let sending = false;
 let total = 0;
@@ -184,32 +228,65 @@ function qrPage(token, folder) {
 <head>
 <meta charset="UTF-8">
 <title>PixPort — QR</title>
+<script>(function(){try{var t=localStorage.getItem('pixport-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 <style>
+  :root {
+    color-scheme:light;
+    --bg:#f2f4fb; --card:#ffffff; --ink:#181b2e; --muted:#6d7394;
+    --line:#e3e7f4; --brand:#3d52f0; --brand-ink:#fff; --soft:#edf0ff;
+    --ok:#1d9e57; --err:#cf3a3a; --shadow:0 10px 30px rgba(35,45,110,.10);
+    --qr-glow:0 12px 50px rgba(61,82,240,.25);
+  }
+  [data-theme="dark"] {
+    color-scheme:dark;
+    --bg:#0b1026; --card:#101637; --ink:#eef1ff; --muted:#8b93c7;
+    --line:#232c60; --brand:#3d52f0; --brand-ink:#fff; --soft:#1b2350;
+    --ok:#9fe6b4; --err:#ff9c9c; --shadow:0 12px 40px rgba(0,0,0,.45);
+    --qr-glow:0 12px 50px rgba(60,80,255,.35);
+  }
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     min-height:100vh; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    background:#0b1026; color:#eef1ff;
+    background:var(--bg); color:var(--ink);
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
     padding:24px;
   }
-  .logo { font-size:12px; letter-spacing:4px; text-transform:uppercase; color:#7f8cff; font-weight:700; }
-  .folder { font-size:17px; font-weight:700; color:#c8cfff; max-width:90vw;
-            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #qr { background:#fff; padding:16px; border-radius:20px; box-shadow:0 12px 50px rgba(60,80,255,.35); }
-  #qr img { display:block; width:280px; height:280px; }
-  .status { font-size:14px; color:#8b93c7; min-height:20px; text-align:center; }
-  .status b { color:#9fe6b4; }
-  .actions { display:flex; gap:10px; margin-top:6px; }
-  .actions button {
-    font-size:14px; padding:9px 16px; border-radius:12px; cursor:pointer;
-    border:1px solid #37429a; background:#1b2350; color:#c8cfff;
+  .top { width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; }
+  .logo { font-size:12px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
+  #themeBtn {
+    width:36px; height:36px; border-radius:50%; border:1px solid var(--line);
+    background:var(--card); font-size:17px; cursor:pointer; line-height:1;
+    box-shadow:var(--shadow);
   }
-  .actions button:hover { background:#232c60; }
-  .hint { font-size:12px; color:#5c6499; }
+  .card {
+    background:var(--card); border:1px solid var(--line); border-radius:24px;
+    padding:26px 26px 22px; display:flex; flex-direction:column; align-items:center; gap:13px;
+    box-shadow:var(--shadow); max-width:420px; width:100%;
+  }
+  .folder { font-size:16px; font-weight:700; color:var(--ink); max-width:100%;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #qr { background:#fff; padding:16px; border-radius:20px; box-shadow:var(--qr-glow); }
+  #qr img { display:block; width:280px; height:280px; }
+  .status { font-size:14px; color:var(--muted); min-height:20px; text-align:center; }
+  .status b { color:var(--ok); }
+  .actions { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; justify-content:center; }
+  .actions button {
+    font-size:13.5px; font-weight:600; padding:9px 15px; border-radius:12px; cursor:pointer;
+    border:1px solid var(--line); background:var(--soft); color:var(--ink);
+    transition:transform .08s, filter .15s;
+  }
+  .actions button:hover { filter:brightness(.97); }
+  .actions button:active { transform:scale(.96); }
+  .actions button:disabled { opacity:.6; cursor:default; }
+  .hint { font-size:12px; color:var(--muted); text-align:center; }
 </style>
 </head>
 <body>
-  <div class="logo">PixPort</div>
+  <div class="top">
+    <div class="logo">PixPort</div>
+    <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
+  </div>
+  <div class="card">
   <div class="folder">📷 ${escapeHtml(folder)}</div>
   <div id="qr"><img id="qrimg" alt="QR"></div>
   <div class="status" id="status">Ожидание телефона…</div>
@@ -222,7 +299,22 @@ function qrPage(token, folder) {
   </div>
   <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
   <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
+  </div>
 
+<script>
+function syncThemeBtn() {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const b = document.getElementById('themeBtn');
+  if (b) b.textContent = dark ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  const dark = document.documentElement.dataset.theme !== 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  try { localStorage.setItem('pixport-theme', dark ? 'dark' : 'light'); } catch (e) {}
+  syncThemeBtn();
+}
+syncThemeBtn();
+</script>
 <script>
 const token = '${token}';
 let dead = false;
@@ -240,7 +332,7 @@ async function refreshMenuBtn() {
   const b = document.getElementById('menuBtn');
   const on = await window.pixport.menuStatus();
   b.textContent = on ? 'Убрать из меню' : 'В меню проводника';
-  b.style.borderColor = on ? '#3d7a52' : '#37429a';
+  b.style.borderColor = on ? '#1d9e57' : '';
 }
 
 async function toggleMenu() {
@@ -258,7 +350,7 @@ async function toggleMenu() {
         : '✓ Готово: правый клик по папке → <b>Показать QR</b>';
     } else {
       st.className = 'status';
-      st.style.color = '#ff9c9c';
+      st.style.color = 'var(--err)';
       st.textContent = 'Не получилось: ' + ((r && r.error) || 'неизвестно');
       setTimeout(() => { st.style.color = ''; }, 4000);
     }
@@ -458,20 +550,31 @@ async function handleRequest(req, res) {
                      (s ? s.folder : [...sessions.values()].at(-1)?.folder);
       if (!folder) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-body{margin:0;font-family:system-ui;background:#0b1026;color:#eef1ff;min-height:100vh;
-display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:30px;text-align:center}
-.logo{font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#7f8cff;font-weight:700}
-h2{font-size:20px;margin:0}p{color:#8b93c7;font-size:14px;margin:0;max-width:340px;line-height:1.5}
+        return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><script>(function(){try{var t=localStorage.getItem('pixport-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();</script><style>
+:root{color-scheme:light;--bg:#f2f4fb;--card:#fff;--ink:#181b2e;--muted:#6d7394;--line:#e3e7f4;--brand:#3d52f0;--brand-ink:#fff;--soft:#edf0ff;--ok:#1d9e57;--err:#cf3a3a;--shadow:0 10px 30px rgba(35,45,110,.10)}
+[data-theme="dark"]{color-scheme:dark;--bg:#0b1026;--card:#101637;--ink:#eef1ff;--muted:#8b93c7;--line:#232c60;--brand:#3d52f0;--brand-ink:#fff;--soft:#1b2350;--ok:#9fe6b4;--err:#ff9c9c;--shadow:0 12px 40px rgba(0,0,0,.45)}
+body{margin:0;font-family:system-ui;background:var(--bg);color:var(--ink);min-height:100vh;
+display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center}
+.top{width:100%;max-width:380px;display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--brand);font-weight:800}
+#themeBtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:17px;cursor:pointer;box-shadow:var(--shadow)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:var(--shadow);max-width:380px}
+h2{font-size:20px;margin:0}p{color:var(--muted);font-size:14px;margin:0;max-width:340px;line-height:1.5}
 button{font-size:16px;font-weight:700;padding:14px 26px;border-radius:14px;border:0;
-background:#3d52f0;color:#fff;cursor:pointer}button:active{transform:scale(.97)}
+background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{transform:scale(.97)}
 </style></head><body>
-<div class="logo">PixPort</div>
+<div class="top"><div class="logo">PixPort</div><button id="themeBtn" title="Тёмная / светлая тема">🌙</button></div>
+<div class="card">
 <h2>Выбери папку для фото</h2>
 <p>Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
 <button id="b">📁 Выбрать папку</button>
-<button id="mb" style="display:none;background:#232c60;border:1px solid #37429a;font-size:14px;padding:10px 20px">В меню проводника</button>
-<div id="ms" style="color:#9fe6b4;font-size:13px;min-height:18px"></div>
+<button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">В меню проводника</button>
+<div id="ms" style="color:var(--ok);font-size:13px;min-height:18px"></div>
+</div>
+<script>
+(function(){function s(){var d=document.documentElement.dataset.theme==='dark';document.getElementById('themeBtn').textContent=d?'☀️':'🌙';}
+document.getElementById('themeBtn').onclick=function(){var d=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=d?'dark':'light';try{localStorage.setItem('pixport-theme',d?'dark':'light');}catch(e){}s();};s();})();
+</script>
 <script>
 if (window.pixport) {
   document.getElementById('b').onclick = async () => {
@@ -493,7 +596,7 @@ if (window.pixport) {
     ms.textContent = r && r.ok
       ? (removing ? 'Пункт убран' : '✓ Готово: правый клик по любой папке → Показать QR')
       : 'Не получилось: ' + ((r && r.error) || 'неизвестно');
-    ms.style.color = r && r.ok ? '#9fe6b4' : '#ff9c9c';
+    ms.style.color = r && r.ok ? 'var(--ok)' : 'var(--err)';
     mb.disabled = false; sync();
   };
   sync();
