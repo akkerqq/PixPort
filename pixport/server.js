@@ -43,18 +43,31 @@ const sessions = new Map();
  *  3. иначе — первый незаглушечный.
  */
 function lanIp() {
+  const all = lanIps();
+  return all[0] || '127.0.0.1';
+}
+
+/**
+ * Все живые IPv4-адреса машины (без internal и APIPA-заглушек).
+ * Приоритет: сначала 192.168.* и 10.* (домашние сети и VPN-туннели реже),
+ * потом остальные (172.16.* и т.п.). Нужен для выбора адреса в окне QR:
+ * угадайка одного IP ломалась на нескольких адаптерах (кейс друга Аккера).
+ */
+function lanIps() {
   const ifs = os.networkInterfaces();
-  const fallback = [];
+  const main = [];
+  const rest = [];
   for (const name of Object.keys(ifs)) {
     for (const it of ifs[name] || []) {
       if (it.family !== 'IPv4' || it.internal) continue;
       const a = it.address;
       if (a.startsWith('169.254.')) continue; // заглушка — телефон туда не достучится
-      if (a.startsWith('192.168.') || a.startsWith('10.')) return a; // настоящая сеть
-      fallback.push(a);
+      if (main.includes(a) || rest.includes(a)) continue;
+      if (a.startsWith('192.168.') || a.startsWith('10.')) main.push(a);
+      else rest.push(a);
     }
   }
-  return fallback[0] || '127.0.0.1';
+  return [...main, ...rest];
 }
 
 function isLoopback(req) {
@@ -244,7 +257,8 @@ function qrPage(token, folder, net) {
   const netWarn = net && net.ok ? '' :
     `<div class="netwarn">⚠ Нет подключения к локальной сети — телефон не сможет загрузить фото. Проверь Wi-Fi на компьютере.</div>`;
   const netHint = net && net.ok ?
-    `<div class="hint">Телефон подключается к ${escapeHtml(net.ip)} · оба должны быть в одном Wi-Fi</div>` : '';
+    `<div class="hint" id="netHint">Телефон подключается к ${escapeHtml(net.ip)} · оба должны быть в одном Wi-Fi</div>
+     <div class="ipRow" id="ipRow" style="display:none"></div>` : '';
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -304,6 +318,12 @@ function qrPage(token, folder, net) {
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
+  .ipRow { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
+  .ipRow button {
+    font-size:12px; font-weight:700; padding:6px 12px; border-radius:10px; cursor:pointer;
+    border:1px solid var(--line); background:var(--soft); color:var(--muted);
+  }
+  .ipRow button.on { color:var(--brand-ink); background:var(--brand); border-color:var(--brand); }
   .netwarn {
     font-size:13px; color:var(--err); border:1px solid var(--err);
     border-radius:12px; padding:10px 14px; text-align:center; max-width:100%; line-height:1.5;
@@ -498,14 +518,44 @@ if (desktop) {
 // закрыли вкладку — токен умер
 window.addEventListener('pagehide', () => navigator.sendBeacon('/api/close?t=' + token));
 
-// QR-картинка
-fetch('/api/qr?t=' + token)
-  .then(r => r.ok ? r.json() : Promise.reject(r.status))
-  .then(u => {
-    document.getElementById('qrimg').src = u;
-    refresh();
+// QR-картинка + выбор адреса, если сетей несколько
+let curIp = null;
+function loadQr(ip) {
+  const q = '/api/qr?t=' + token + (ip ? '&ip=' + encodeURIComponent(ip) : '');
+  fetch(q)
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(u => {
+      document.getElementById('qrimg').src = u;
+      if (ip) {
+        curIp = ip;
+        const h = document.getElementById('netHint');
+        if (h) h.textContent = 'Телефон подключается к ' + ip + ' · оба должны быть в одном Wi-Fi';
+        document.querySelectorAll('#ipRow button').forEach(b =>
+          b.classList.toggle('on', b.dataset.ip === ip));
+      }
+      refresh();
+    })
+    .catch(e => { document.getElementById('status').textContent = 'Не удалось получить QR: ' + e; });
+}
+fetch('/api/ips?t=' + token)
+  .then(r => r.ok ? r.json() : null)
+  .then(s => {
+    if (s && s.ips && s.ips.length > 1) {
+      curIp = s.current;
+      const row = document.getElementById('ipRow');
+      row.style.display = 'flex';
+      s.ips.forEach(ip => {
+        const b = document.createElement('button');
+        b.textContent = ip;
+        b.dataset.ip = ip;
+        if (ip === s.current) b.classList.add('on');
+        b.onclick = () => loadQr(ip);
+        row.appendChild(b);
+      });
+    }
   })
-  .catch(e => { document.getElementById('status').textContent = 'Не удалось получить QR: ' + e; });
+  .catch(() => {})
+  .finally(() => loadQr(curIp));
 </script>
 </body>
 </html>`;
@@ -629,9 +679,16 @@ async function handleRequest(req, res) {
     }
     if (url.pathname === '/api/qr') {
       if (!s) return json(res, 404, { ok: false });
-      const link = `http://${lanIp()}:${PORT}/u?t=${q}`;
+      // адрес можно выбрать в окне (несколько сетей); чужой IP не принимаем
+      const want = url.searchParams.get('ip');
+      const ip = lanIps().includes(want) ? want : lanIp();
+      const link = `http://${ip}:${PORT}/u?t=${q}`;
       const data = await QRCode.toDataURL(link, { width: 560, margin: 1, errorCorrectionLevel: 'M' });
       return json(res, 200, data);
+    }
+    if (url.pathname === '/api/ips') {
+      if (!s) return json(res, 404, { ok: false });
+      return json(res, 200, { ips: lanIps(), current: lanIp() });
     }
     if (url.pathname === '/api/open') {
       if (s) openInBrowser(s.folder);
@@ -811,4 +868,4 @@ async function start({ openBrowser = true } = {}) {
 // запуск из консоли: node server.js "C:\папка"
 if (require.main === module) start({ openBrowser: true });
 
-module.exports = { start, lanIp, PORT, resolveFolder };
+module.exports = { start, lanIp, lanIps, PORT, resolveFolder };
