@@ -1,0 +1,12 @@
+{
+  "name": "pixport",
+  "version": "0.1.0",
+  "description": "PixPort — фото с телефона сразу в нужную папку на ПК. Скан QR — и готово.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "test": "node test.js"
+  },
+  "license": "MIT"
+}

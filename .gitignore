@@ -1,0 +1,14 @@
+# Зависимости и сборки
+node_modules/
+dist/
+out/
+*.log
+
+# Системный мусор
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Временное / тестовое
+tmp/
+.temp/
