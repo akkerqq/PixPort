@@ -90,7 +90,7 @@ function createWindow() {
     height: 760,
     minWidth: 420,
     minHeight: 560,
-    backgroundColor: '#0b1026',
+    backgroundColor: '#0d0d0f',
     title: 'PixPort',
     autoHideMenuBar: true,
     webPreferences: {
