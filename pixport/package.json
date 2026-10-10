@@ -6,7 +6,19 @@
   "scripts": {
     "start": "electron .",
     "server": "node server.js",
-    "test": "node test.js"
+    "test": "node test.js",
+    "build": "node build.js",
+    "menu": "node install.js",
+    "menu:off": "node install.js uninstall"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.34.4"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.7.0"
+  }
 }
