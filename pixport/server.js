@@ -108,15 +108,17 @@ setInterval(() => {
 
 /* ------------------------------------------------------- страницы (HTML) */
 
-function uploadPage(token, folderName) {
+function uploadPage(token, folderName, lang) {
   const title = escapeHtml(folderName);
+  const initLang = lang === 'en' ? 'en' : 'ru';
   return `<!DOCTYPE html>
-<html lang="ru">
+<html lang="${initLang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>PixPort — ${title}</title>
 <script>(function(){try{var t=localStorage.getItem('pixport-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+<script>window.__INIT_LANG='${initLang}';</script>
 <style>
   :root {
     color-scheme:light;
@@ -183,26 +185,29 @@ function uploadPage(token, folderName) {
 <body>
   <div class="top">
     <div class="logo">PixPort</div>
-    <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
+    <div style="display:flex;gap:8px">
+      <button id="langBtn" onclick="toggleLang()" title="RU / EN" style="height:38px;min-width:52px;padding:0 12px;border-radius:19px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px;font-weight:800;cursor:pointer;box-shadow:var(--shadow)">RU</button>
+      <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
+    </div>
   </div>
   <div class="card">
   <div class="folder">📁 ${title}</div>
-  <div class="hint">Фото сразу попадут в папку на компьютере</div>
+  <div class="hint" data-i="upHint">Фото сразу попадут в папку на компьютере</div>
 
   <div class="btns">
     <label class="btn">
-      📷 Снять фото
+      <span data-i="btn_shoot">📷 Снять фото</span>
       <input type="file" accept="image/*" capture="environment" multiple onchange="send(this.files)">
     </label>
     <label class="btn alt">
-      🖼 Выбрать из галереи
+      <span data-i="btn_gallery">🖼 Выбрать из галереи</span>
       <input type="file" accept="image/*" multiple onchange="send(this.files)">
     </label>
   </div>
 
   <div id="status"></div>
   </div>
-  <div class="foot">PixPort · без проводов и мессенджеров</div>
+  <div class="foot" data-i="foot">PixPort · без проводов и мессенджеров</div>
 
 <script>
 function syncThemeBtn() {
@@ -217,6 +222,9 @@ function toggleTheme() {
 }
 syncThemeBtn();
 </script>
+<script>${LANG_DICT_JS}</script>
+<script>${LANG_JS}</script>
+<script>applyLang(__LANG);</script>
 <script>
 let sending = false;
 let total = 0;
@@ -227,7 +235,7 @@ async function send(files) {
   const st = document.getElementById('status');
   st.className = 'show';
   for (const f of files) {
-    st.textContent = 'Отправляю ' + f.name + '…';
+    st.textContent = t('sending', { f: f.name });
     try {
       const fd = new FormData();
       fd.append('file', f, f.name);
@@ -235,11 +243,10 @@ async function send(files) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       total++;
       st.className = 'show';
-      st.innerHTML = '<div class="count">✓ ' + total + '</div>отправлено в папку' +
-        (total > 1 ? ' — фото' : 'е') ;
+      st.innerHTML = '<div class="count">' + t('sent', { n: total }) + '</div>';
     } catch (e) {
       st.className = 'show err';
-      st.textContent = 'Ошибка: ' + e.message + '. Попробуй ещё раз.';
+      st.textContent = t('sendErr', { e: e.message });
       sending = false;
       return;
     }
@@ -257,8 +264,7 @@ function qrPage(token, folder, net) {
   const netWarn = net && net.ok ? '' :
     `<div class="netwarn">⚠ Нет подключения к локальной сети — телефон не сможет загрузить фото. Проверь Wi-Fi на компьютере.</div>`;
   const netHint = net && net.ok ?
-    `<div class="hint" id="netHint">Телефон подключается к ${escapeHtml(net.ip)} · оба должны быть в одном Wi-Fi</div>
-     <div class="ipRow" id="ipRow" style="display:none"></div>` : '';
+    `<div class="hint" id="netHint">Телефон подключается к ${escapeHtml(net.ip)} · оба должны быть в одном Wi-Fi</div>` : '';
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -368,40 +374,48 @@ function qrPage(token, folder, net) {
   <div class="folder">📷 ${escapeHtml(folder)}</div>
   ${netWarn}
   <div id="qr"><img id="qrimg" alt="QR"></div>
-  <div class="status" id="status">Ожидание телефона…</div>
+  <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
   <div class="actions">
-    <button onclick="newQr()">Новый QR</button>
-    <button onclick="closeQr()">Закрыть</button>
-    <button onclick="openFolder()">Открыть папку</button>
-    <button id="pickBtn" style="display:none" onclick="pickFolder()">Сменить папку</button>
-    <button id="settingsBtn" style="display:none" onclick="openSettings()">⚙ Настройки</button>
+    <button onclick="newQr()" data-i="btn_new">Новый QR</button>
+    <button onclick="closeQr()" data-i="btn_close">Закрыть</button>
+    <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
+    <button id="pickBtn" style="display:none" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
+    <button id="settingsBtn" style="display:none" onclick="openSettings()" data-i="btn_settings">⚙ Настройки</button>
   </div>
-  <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
+  <div class="hint" data-i="hint_scan">Сканируй камерой телефона · код живёт 30 минут</div>
   ${netHint}
   <div class="hint">PixPort v${APP_VERSION}</div>
-  <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
+  <div class="hint" id="dropHint" style="display:none" data-i="dropHint">…или перетащи папку сюда</div>
   </div>
-  <button class="helpLink" onclick="openHelp()">Как пользоваться</button>
+  <button class="helpLink" onclick="openHelp()" data-i="helpLink">Как пользоваться</button>
   <div class="overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
     <div class="sheet">
-      <h3>⚙ Настройки</h3>
-      <div style="font-size:14px;font-weight:700;margin-bottom:8px">Пункт в меню проводника</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
-      <button id="menuBtn" style="display:none" onclick="toggleMenu()">В меню проводника</button>
+      <h3 data-i="setTitle">⚙ Настройки</h3>
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="netTitle">Подключение телефона</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" data-i="netDesc">Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.</div>
+      <div class="ipRow" id="ipRow" style="margin-bottom:14px"></div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="langTitle">Язык / Language</div>
+      <div style="margin-bottom:14px">
+        <button data-lang-btn="ru" onclick="setLang('ru')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">RU</button>
+        <button data-lang-btn="en" onclick="setLang('en')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">EN</button>
+      </div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
+      <button id="menuBtn" style="display:none" onclick="toggleMenu()" data-i="menuBtnAdd">В меню проводника</button>
       <div id="menuMsg" style="font-size:13px;color:var(--ok);min-height:18px;margin-top:8px"></div>
-      <div class="closeRow"><button onclick="closeSettings()">Готово</button></div>
+      <div class="closeRow"><button onclick="closeSettings()" data-i="btn_done">Готово</button></div>
     </div>
   </div>
   <div class="overlay" id="helpOverlay" onclick="if(event.target===this)closeHelp()">
     <div class="sheet">
-      <h3>Как пользоваться PixPort</h3>
+      <h3 data-i="helpTitle">Как пользоваться PixPort</h3>
       <ol>
-        <li><b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
-        <li><b>Наведи камеру телефона</b> на QR-код.</li>
-        <li><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
+        <li data-i-html="help1"><b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
+        <li data-i-html="help2"><b>Наведи камеру телефона</b> на QR-код.</li>
+        <li data-i-html="help3"><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
       </ol>
-      <div class="note">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.</div>
-      <div class="closeRow"><button onclick="closeHelp()">Понятно</button></div>
+      <div class="note" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.</div>
+      <div class="closeRow"><button onclick="closeHelp()" data-i="btn_ok">Понятно</button></div>
     </div>
   </div>
 
@@ -419,6 +433,9 @@ function toggleTheme() {
 }
 syncThemeBtn();
 </script>
+<script>${LANG_DICT_JS}</script>
+<script>${LANG_JS}</script>
+<script>applyLang(__LANG);</script>
 <script>
 const token = '${token}';
 let dead = false;
@@ -437,36 +454,36 @@ function openSettings() {
     document.getElementById('menuBtn').style.display = '';
     refreshMenuBtn();
   }
+  loadIps();
 }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
 
 async function refreshMenuBtn() {
   const b = document.getElementById('menuBtn');
   const on = await window.pixport.menuStatus();
-  b.textContent = on ? 'Убрать из меню' : 'В меню проводника';
+  b.dataset.on = on ? '1' : '';
+  b.textContent = on ? t('menuBtnDel') : t('menuBtnAdd');
   b.style.borderColor = on ? '#1d9e57' : '';
 }
 
 async function toggleMenu() {
   const b = document.getElementById('menuBtn');
-  const removing = b.textContent.includes('Убрать'); // запоминаем ДО смены текста
+  const removing = b.dataset.on === '1'; // состояние, а не текст — текст зависит от языка
   const msg = document.getElementById('menuMsg');
   b.disabled = true;
-  b.textContent = 'Секунду…';
+  b.textContent = t('wait');
   try {
     const r = await (removing ? window.pixport.menuRemove() : window.pixport.menuInstall());
     if (r && r.ok) {
       msg.style.color = 'var(--ok)';
-      msg.innerHTML = removing
-        ? 'Пункт убран из контекстного меню'
-        : '✓ Готово: правый клик по папке → <b>Показать QR</b>';
+      msg.innerHTML = removing ? t('menu_removed') : t('menu_added');
     } else {
       msg.style.color = 'var(--err)';
-      msg.textContent = 'Не получилось: ' + ((r && r.error) || 'неизвестно');
+      msg.textContent = t('menu_fail') + ((r && r.error) || t('unknown'));
     }
   } catch (e) {
     msg.style.color = 'var(--err)';
-    msg.textContent = 'Ошибка: ' + e.message;
+    msg.textContent = t('err_prefix') + e.message;
   }
   b.disabled = false;
   await refreshMenuBtn();
@@ -476,10 +493,10 @@ async function refresh() {
   if (dead) return;
   try {
     const r = await fetch('/api/status?t=' + token);
-    if (r.status === 404) { die('QR закрыт'); return; }
+    if (r.status === 404) { die(t('status_closed')); return; }
     const s = await r.json();
     const st = document.getElementById('status');
-    if (s.received > 0) st.innerHTML = 'Принято фото: <b>' + s.received + '</b>';
+    if (s.received > 0) st.innerHTML = t('received', { n: s.received });
   } catch (e) { /* сервер жив, просто мигнули */ }
 }
 setInterval(refresh, 1200);
@@ -492,7 +509,7 @@ function closeHelp() { document.getElementById('helpOverlay').classList.remove('
 function closeQr() {
   navigator.sendBeacon('/api/close?t=' + token);
   if (desktop) setTimeout(() => window.close(), 250);
-  else die('QR закрыт — можно закрывать вкладку');
+  else die(t('closed_tab'));
 }
 function openFolder() {
   if (desktop) window.pixport.openPath(location.search.split('folder=')[1] ? decodeURIComponent(location.search.split('folder=')[1]) : '');
@@ -521,7 +538,8 @@ window.addEventListener('pagehide', () => navigator.sendBeacon('/api/close?t=' +
 // QR-картинка + выбор адреса, если сетей несколько
 let curIp = null;
 function loadQr(ip) {
-  const q = '/api/qr?t=' + token + (ip ? '&ip=' + encodeURIComponent(ip) : '');
+  const q = '/api/qr?t=' + token + (ip ? '&ip=' + encodeURIComponent(ip) : '') +
+    '&lang=' + (__LANG === 'en' ? 'en' : 'ru');
   fetch(q)
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(u => {
@@ -529,33 +547,38 @@ function loadQr(ip) {
       if (ip) {
         curIp = ip;
         const h = document.getElementById('netHint');
-        if (h) h.textContent = 'Телефон подключается к ' + ip + ' · оба должны быть в одном Wi-Fi';
+        if (h) h.textContent = t('phone_via', { ip });
         document.querySelectorAll('#ipRow button').forEach(b =>
           b.classList.toggle('on', b.dataset.ip === ip));
       }
       refresh();
     })
-    .catch(e => { document.getElementById('status').textContent = 'Не удалось получить QR: ' + e; });
+    .catch(e => { document.getElementById('status').textContent = t('qr_fail') + e; });
 }
-fetch('/api/ips?t=' + token)
-  .then(r => r.ok ? r.json() : null)
-  .then(s => {
-    if (s && s.ips && s.ips.length > 1) {
-      curIp = s.current;
-      const row = document.getElementById('ipRow');
-      row.style.display = 'flex';
-      s.ips.forEach(ip => {
-        const b = document.createElement('button');
-        b.textContent = ip;
-        b.dataset.ip = ip;
-        if (ip === s.current) b.classList.add('on');
-        b.onclick = () => loadQr(ip);
-        row.appendChild(b);
-      });
-    }
-  })
-  .catch(() => {})
-  .finally(() => loadQr(curIp));
+function loadIps() {
+  const row = document.getElementById('ipRow');
+  if (!row || row.dataset.done) return;
+  fetch('/api/ips?t=' + token)
+    .then(r => r.ok ? r.json() : null)
+    .then(s => {
+      if (s && s.ips && s.ips.length > 1) {
+        curIp = s.current;
+        row.dataset.done = '1';
+        s.ips.forEach(ip => {
+          const b = document.createElement('button');
+          b.textContent = ip;
+          b.dataset.ip = ip;
+          if (ip === s.current) b.classList.add('on');
+          b.onclick = () => loadQr(ip);
+          row.appendChild(b);
+        });
+      } else {
+        row.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+loadQr(null);
 </script>
 </body>
 </html>`;
@@ -565,6 +588,124 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+/* ------------------------------------------------------- язык (RU/EN) */
+
+// Словари для клиента. Русский = дефолт, сервер рендерит его же inline.
+// data-i="key" — подмена текста, data-i-html="key" — подмена с HTML внутри.
+const LANG_DICT = {
+ru: {
+  status_wait: 'Ожидание телефона…',
+  btn_new: 'Новый QR', btn_close: 'Закрыть', btn_open: 'Открыть папку',
+  btn_pick: 'Сменить папку', btn_settings: '⚙ Настройки',
+  hint_scan: 'Сканируй камерой телефона · код живёт 30 минут',
+  phone_via: 'Телефон подключается к {ip} · оба должны быть в одном Wi-Fi',
+  dropHint: '…или перетащи папку сюда',
+  helpLink: 'Как пользоваться', helpTitle: 'Как пользоваться PixPort',
+  help1: '<b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.',
+  help2: '<b>Наведи камеру телефона</b> на QR-код.',
+  help3: '<b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.',
+  helpNote: 'Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.',
+  btn_ok: 'Понятно', setTitle: '⚙ Настройки',
+  netTitle: 'Подключение телефона',
+  netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
+  langTitle: 'Язык / Language',
+  menuTitle: 'Пункт в меню проводника',
+  menuDesc: 'Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.',
+  menuBtnAdd: 'В меню проводника', menuBtnDel: 'Убрать из меню',
+  menu_added: '✓ Готово: правый клик по папке → <b>Показать QR</b>',
+  menu_removed: 'Пункт убран из контекстного меню',
+  menu_fail: 'Не получилось: ',
+  btn_done: 'Готово',
+  status_closed: 'QR закрыт', received: 'Принято фото: <b>{n}</b>',
+  qr_fail: 'Не удалось получить QR: ', err_prefix: 'Ошибка: ',
+  wait: 'Секунду…', unknown: 'неизвестно',
+  closed_tab: 'QR закрыт — можно закрывать вкладку',
+  pickTitle: 'Выбери папку для фото',
+  pickDesc: 'Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.',
+  btn_choose: '📁 Выбрать папку',
+  menu_added_short: '✓ Готово: правый клик по любой папке → Показать QR',
+  menu_removed_short: 'Пункт убран',
+  nofolder: 'Запусти PixPort с папкой:<br><code>node server.js "C:\\папка"</code>',
+  upHint: 'Фото сразу попадут в папку на компьютере',
+  btn_shoot: '📷 Снять фото', btn_gallery: '🖼 Выбрать из галереи',
+  foot: 'PixPort · без проводов и мессенджеров',
+  sending: 'Отправляю {f}…', sent: '✓ {n} — отправлено в папку',
+  sendErr: 'Ошибка: {e}. Попробуй ещё раз.',
+},
+en: {
+  status_wait: 'Waiting for phone…',
+  btn_new: 'New QR', btn_close: 'Close', btn_open: 'Open folder',
+  btn_pick: 'Change folder', btn_settings: '⚙ Settings',
+  hint_scan: 'Scan with your phone camera · code lives 30 minutes',
+  phone_via: 'Phone connects to {ip} · both must be on the same Wi-Fi',
+  dropHint: '…or drag a folder here',
+  helpLink: 'How to use', helpTitle: 'How to use PixPort',
+  help1: '<b>Pick a folder</b> — with the button, by dragging into the window, right-clicking it in Explorer, or <b>Ctrl+Alt+Q</b> inside it.',
+  help2: '<b>Point your phone camera</b> at the QR code.',
+  help3: '<b>Take a photo</b> or pick from gallery — it lands straight in the PC folder.',
+  helpNote: 'Phone and PC must be on the same Wi-Fi. QR lives 30 minutes. Closing the window minimizes to tray — the hotkey keeps working.',
+  btn_ok: 'Got it', setTitle: '⚙ Settings',
+  netTitle: 'Phone connection',
+  netDesc: 'Multiple networks and the phone won\'t load? Pick another address, the QR regenerates.',
+  langTitle: 'Язык / Language',
+  menuTitle: 'Explorer context menu item',
+  menuDesc: 'Adds “Show QR” to folder right-click. Set once — then it just works.',
+  menuBtnAdd: 'Add to menu', menuBtnDel: 'Remove from menu',
+  menu_added: '✓ Done: right-click a folder → <b>Show QR</b>',
+  menu_removed: 'Menu item removed',
+  menu_fail: 'Failed: ',
+  btn_done: 'Done',
+  status_closed: 'QR closed', received: 'Photos received: <b>{n}</b>',
+  qr_fail: 'Could not get QR: ', err_prefix: 'Error: ',
+  wait: 'One sec…', unknown: 'unknown',
+  closed_tab: 'QR closed — you can close the tab',
+  pickTitle: 'Pick a folder for photos',
+  pickDesc: 'Press the button below or drag a folder into this window.<br>Then point your phone camera at the QR code.',
+  btn_choose: '📁 Pick a folder',
+  menu_added_short: '✓ Done: right-click any folder → Show QR',
+  menu_removed_short: 'Menu item removed',
+  nofolder: 'Start PixPort with a folder:<br><code>node server.js "C:\\folder"</code>',
+  upHint: 'Photos land straight in the PC folder',
+  btn_shoot: '📷 Take a photo', btn_gallery: '🖼 Choose from gallery',
+  foot: 'PixPort · no cables, no messengers',
+  sending: 'Sending {f}…', sent: '✓ {n} sent to folder',
+  sendErr: 'Error: {e}. Try again.',
+}};
+
+// Общий клиентский код языка. Сервер вставляет window.__INIT_LANG до него.
+const LANG_JS = `
+var __LANG = window.__INIT_LANG || null;
+try { __LANG = __LANG || localStorage.getItem('pixport-lang') || 'ru'; } catch (e) { __LANG = __LANG || 'ru'; }
+if (!LANG_DICT[__LANG]) __LANG = 'ru';
+function t(k, vars) {
+  var s = (LANG_DICT[__LANG] && LANG_DICT[__LANG][k]) || LANG_DICT.ru[k] || k;
+  if (vars) for (var key in vars) s = s.split('{' + key + '}').join(vars[key]);
+  return s;
+}
+function applyLang(lang) {
+  __LANG = LANG_DICT[lang] ? lang : 'ru';
+  document.querySelectorAll('[data-i]').forEach(function (el) {
+    el.textContent = t(el.dataset.i);
+  });
+  document.querySelectorAll('[data-i-html]').forEach(function (el) {
+    el.innerHTML = t(el.dataset.iHtml);
+  });
+  document.querySelectorAll('[data-lang-btn]').forEach(function (b) {
+    const on = b.dataset.langBtn === __LANG;
+    b.style.fontWeight = on ? '800' : '400';
+    b.style.opacity = on ? '1' : '.55';
+  });
+  const lb = document.getElementById('langBtn');
+  if (lb) lb.textContent = __LANG.toUpperCase();
+}
+function setLang(lang) {
+  try { localStorage.setItem('pixport-lang', lang); } catch (e) {}
+  applyLang(lang);
+}
+function toggleLang() { setLang(__LANG === 'ru' ? 'en' : 'ru'); }
+`;
+const LANG_DICT_JS = 'var LANG_DICT = ' + JSON.stringify(LANG_DICT) + ';';
 
 /* ------------------------------------------------------------ обработка */
 
@@ -682,7 +823,9 @@ async function handleRequest(req, res) {
       // адрес можно выбрать в окне (несколько сетей); чужой IP не принимаем
       const want = url.searchParams.get('ip');
       const ip = lanIps().includes(want) ? want : lanIp();
-      const link = `http://${ip}:${PORT}/u?t=${q}`;
+      // язык окна едет в ссылку — телефон откроется сразу на нём
+      const lang = url.searchParams.get('lang') === 'en' ? '&lang=en' : '';
+      const link = `http://${ip}:${PORT}/u?t=${q}${lang}`;
       const data = await QRCode.toDataURL(link, { width: 560, margin: 1, errorCorrectionLevel: 'M' });
       return json(res, 200, data);
     }
@@ -718,33 +861,38 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 </style></head><body>
 <div class="top"><div class="logo">PixPort</div><button id="themeBtn" title="Тёмная / светлая тема">🌙</button></div>
 <div class="card">
-<h2>Выбери папку для фото</h2>
-<p>Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
-<button id="b">📁 Выбрать папку</button>
-<button id="sbtn" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">⚙ Настройки</button>
+<h2 data-i="pickTitle">Выбери папку для фото</h2>
+<p data-i-html="pickDesc">Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
+<button id="b" data-i="btn_choose">📁 Выбрать папку</button>
+<button id="sbtn" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="btn_settings">⚙ Настройки</button>
 </div>
 <div id="setOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
 <div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left">
-<div style="font-size:17px;font-weight:800;margin-bottom:12px">⚙ Настройки</div>
-<div style="font-size:14px;font-weight:700;margin-bottom:8px">Пункт в меню проводника</div>
-<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
-<button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">В меню проводника</button>
+<div style="font-size:17px;font-weight:800;margin-bottom:12px" data-i="setTitle">⚙ Настройки</div>
+<div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="langTitle">Язык / Language</div>
+<div style="margin-bottom:14px">
+<button data-lang-btn="ru" onclick="setLang('ru')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">RU</button>
+<button data-lang-btn="en" onclick="setLang('en')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">EN</button>
+</div>
+<div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
+<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
+<button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="menuBtnAdd">В меню проводника</button>
 <div id="ms" style="color:var(--ok);font-size:13px;min-height:18px;margin-top:8px"></div>
 <div style="font-size:11px;color:var(--muted);margin-top:6px">PixPort v${APP_VERSION}</div>
-<div style="text-align:right;margin-top:14px"><button id="setOk" style="font-size:14px">Готово</button></div>
+<div style="text-align:right;margin-top:14px"><button id="setOk" style="font-size:14px" data-i="btn_done">Готово</button></div>
 </div>
 </div>
-<button id="helpLink" style="background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 8px">Как пользоваться</button>
+<button id="helpLink" style="background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 8px" data-i="helpLink">Как пользоваться</button>
 <div id="helpOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
 <div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left">
-<div style="font-size:17px;font-weight:800;margin-bottom:12px">Как пользоваться PixPort</div>
+<div style="font-size:17px;font-weight:800;margin-bottom:12px" data-i="helpTitle">Как пользоваться PixPort</div>
 <ol style="margin:0 0 6px 20px;font-size:14px;line-height:1.65">
-<li><b>Выбери папку</b> — кнопкой выше, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
-<li><b>Наведи камеру телефона</b> на QR-код.</li>
-<li><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
+<li data-i-html="help1"><b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
+<li data-i-html="help2"><b>Наведи камеру телефона</b> на QR-код.</li>
+<li data-i-html="help3"><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
 </ol>
-<div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:8px">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.</div>
-<div style="text-align:right;margin-top:14px"><button id="helpOk" style="font-size:14px">Понятно</button></div>
+<div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:8px" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.</div>
+<div style="text-align:right;margin-top:14px"><button id="helpOk" style="font-size:14px" data-i="btn_ok">Понятно</button></div>
 </div>
 </div>
 <script>
@@ -755,6 +903,9 @@ document.getElementById('helpLink').onclick=function(){ov.style.display='flex';}
 document.getElementById('helpOk').onclick=function(){ov.style.display='none';};
 ov.onclick=function(e){if(e.target===ov)ov.style.display='none';};})();
 </script>
+<script>${LANG_DICT_JS}</script>
+<script>${LANG_JS}</script>
+<script>applyLang(__LANG);</script>
 <script>
 if (window.pixport) {
   document.getElementById('b').onclick = async () => {
@@ -772,15 +923,16 @@ if (window.pixport) {
   sov.onclick = e => { if (e.target === sov) sov.style.display = 'none'; };
   async function sync() {
     const on = await window.pixport.menuStatus();
-    mb.textContent = on ? 'Убрать из меню проводника' : 'В меню проводника';
+    mb.dataset.on = on ? '1' : '';
+    mb.textContent = on ? t('menuBtnDel') : t('menuBtnAdd');
   }
   mb.onclick = async () => {
-    const removing = mb.textContent.includes('Убрать'); // запоминаем ДО смены текста
-    mb.disabled = true; mb.textContent = 'Секунду…';
+    const removing = mb.dataset.on === '1'; // состояние, а не текст — текст зависит от языка
+    mb.disabled = true; mb.textContent = t('wait');
     const r = removing ? await window.pixport.menuRemove() : await window.pixport.menuInstall();
     ms.textContent = r && r.ok
-      ? (removing ? 'Пункт убран' : '✓ Готово: правый клик по любой папке → Показать QR')
-      : 'Не получилось: ' + ((r && r.error) || 'неизвестно');
+      ? (removing ? t('menu_removed_short') : t('menu_added_short'))
+      : t('menu_fail') + ((r && r.error) || t('unknown'));
     ms.style.color = r && r.ok ? 'var(--ok)' : 'var(--err)';
     mb.disabled = false; sync();
   };
@@ -796,7 +948,7 @@ if (window.pixport) {
   });
 } else {
   document.getElementById('b').style.display = 'none';
-  document.querySelector('p').innerHTML = 'Запусти PixPort с папкой:<br><code>node server.js "C:\\\\папка"</code>';
+  document.querySelector('p').innerHTML = t('nofolder');
 }
 </script></body></html>`);
       }
@@ -815,7 +967,8 @@ if (window.pixport) {
     }
     if (req.method === 'POST') return handleUpload(req, res, q);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return res.end(uploadPage(q, path.basename(s.folder)));
+    const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'ru';
+    return res.end(uploadPage(q, path.basename(s.folder), lang));
   }
 
   json(res, 404, { ok: false });
