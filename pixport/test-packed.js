@@ -32,6 +32,8 @@ function post(u, filename, buf) {
 }
 
 (async () => {
+  // чистим папку — иначе тест падает на остатках прошлого прогона
+  fs.rmSync(FOLDER, { recursive: true, force: true });
   fs.mkdirSync(FOLDER, { recursive: true });
   const page = await get('http://127.0.0.1:8765/?folder=' + encodeURIComponent(FOLDER));
   const t = /const token = '([^']+)'/.exec(page)[1];

@@ -7,9 +7,20 @@
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const { start, PORT, resolveFolder } = require('./server.js');
 
+// диагностика: пишем всё подозрительное в файл (в собранной версии консоли нет)
+const LOG = path.join(os.tmpdir(), 'pixport-diag.log');
+function diag(...a) {
+  try { fs.appendFileSync(LOG, `[${new Date().toISOString()}] ` + a.join(' ') + '\n'); } catch (e) {}
+}
+diag('--- старт ---', 'argv =', JSON.stringify(process.argv), 'execPath =', process.execPath);
+
 let win = null;
+
+const appDir = __dirname; // папка приложения (dev: pixport, packed: resources/app)
 
 /**
  * Достать путь к папке из аргументов запуска.
@@ -52,6 +63,16 @@ function createWindow() {
 
   win.loadURL(qrUrl(folderFromArgv(process.argv)));
   win.on('closed', () => { win = null; });
+
+  // что реально происходит с загрузкой страницы
+  win.webContents.on('did-fail-load', (e, code, desc, url) =>
+    diag('FAIL LOAD', code, desc, url));
+  win.webContents.on('did-finish-load', () =>
+    diag('OK LOAD', win.webContents.getURL()));
+  win.webContents.on('console-message', (e, lvl, msg) =>
+    diag('CONSOLE', lvl, msg));
+  process.on('uncaughtException', e => diag('UNCAUGHT', e.stack || e.message));
+  process.on('unhandledRejection', e => diag('UNHANDLED', String(e && e.stack || e)));
 }
 
 // --- однокомандная блокировка: второй запуск открывает папку в первом окне
@@ -70,11 +91,14 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    await start({ openBrowser: false });
+    diag('whenReady, начинаю сервер');
+    const r = await start({ openBrowser: false });
+    diag('старт сервера:', r);
     createWindow();
+    diag('окно создано');
 
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-  });
+  }).catch(e => diag('ОШИБКА старта:', e.stack || e.message));
 }
 
 app.on('window-all-closed', () => { app.quit(); });
