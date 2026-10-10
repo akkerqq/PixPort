@@ -37,7 +37,7 @@ packager({
     /^\/node_modules\/sharp\/(src|install|vendor|include)(\/|$)/,
     /^\/node_modules\/.*\/(test|tests|docs|example|examples)(\/|$)/,
   ],
-  appVersion: '0.1.1',
+  appVersion: require('./package.json').version, // одна версия в package.json — не держим вторую руками
   win32metadata: {
     CompanyName: 'akkerqq',
     FileDescription: 'PixPort — фото с телефона сразу в папку',
