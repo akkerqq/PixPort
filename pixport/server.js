@@ -113,7 +113,8 @@ function uploadPage(token, folderName) {
   .logo { font-size:13px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
   #themeBtn {
     width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
-    background:var(--card); font-size:18px; cursor:pointer; line-height:1;
+    background:var(--card); font-size:18px; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; line-height:1;
     box-shadow:var(--shadow);
   }
   .card {
@@ -255,7 +256,8 @@ function qrPage(token, folder) {
   .logo { font-size:12px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
   #themeBtn {
     width:36px; height:36px; border-radius:50%; border:1px solid var(--line);
-    background:var(--card); font-size:17px; cursor:pointer; line-height:1;
+    background:var(--card); font-size:17px; cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; line-height:1;
     box-shadow:var(--shadow);
   }
   .card {
@@ -553,11 +555,13 @@ async function handleRequest(req, res) {
         return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><script>(function(){try{var t=localStorage.getItem('pixport-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();</script><style>
 :root{color-scheme:light;--bg:#f2f4fb;--card:#fff;--ink:#181b2e;--muted:#6d7394;--line:#e3e7f4;--brand:#3d52f0;--brand-ink:#fff;--soft:#edf0ff;--ok:#1d9e57;--err:#cf3a3a;--shadow:0 10px 30px rgba(35,45,110,.10)}
 [data-theme="dark"]{color-scheme:dark;--bg:#0b1026;--card:#101637;--ink:#eef1ff;--muted:#8b93c7;--line:#232c60;--brand:#3d52f0;--brand-ink:#fff;--soft:#1b2350;--ok:#9fe6b4;--err:#ff9c9c;--shadow:0 12px 40px rgba(0,0,0,.45)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
 body{margin:0;font-family:system-ui;background:var(--bg);color:var(--ink);min-height:100vh;
-display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center}
+display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center;overflow:hidden}
 .top{width:100%;max-width:380px;display:flex;align-items:center;justify-content:space-between}
 .logo{font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--brand);font-weight:800}
-#themeBtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:17px;cursor:pointer;box-shadow:var(--shadow)}
+#themeBtn{width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:var(--card);font-size:17px;cursor:pointer;box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;line-height:1}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:var(--shadow);max-width:380px}
 h2{font-size:20px;margin:0}p{color:var(--muted);font-size:14px;margin:0;max-width:340px;line-height:1.5}
 button{font-size:16px;font-weight:700;padding:14px 26px;border-radius:14px;border:0;
