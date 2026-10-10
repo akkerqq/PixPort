@@ -285,6 +285,30 @@ function qrPage(token, folder) {
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
+  .helpLink {
+    background:none; border:0; color:var(--muted); font-size:12.5px; cursor:pointer;
+    text-decoration:underline; text-underline-offset:3px; padding:4px 8px;
+  }
+  .helpLink:hover { color:var(--brand); }
+  .overlay {
+    display:none; position:fixed; inset:0; background:rgba(15,18,40,.5);
+    align-items:center; justify-content:center; padding:24px; z-index:10;
+  }
+  .overlay.open { display:flex; }
+  .sheet {
+    background:var(--card); color:var(--ink); border:1px solid var(--line);
+    border-radius:20px; box-shadow:var(--shadow); max-width:400px; width:100%;
+    padding:24px 22px; text-align:left;
+  }
+  .sheet h3 { font-size:17px; margin-bottom:12px; }
+  .sheet ol { margin:0 0 6px 20px; font-size:14px; line-height:1.65; color:var(--ink); }
+  .sheet ol small { color:var(--muted); }
+  .sheet .note { font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:8px; }
+  .sheet .closeRow { text-align:right; margin-top:14px; }
+  .sheet .closeRow button {
+    font-size:14px; font-weight:700; padding:9px 20px; border-radius:12px; cursor:pointer;
+    border:0; background:var(--brand); color:var(--brand-ink);
+  }
 </style>
 </head>
 <body>
@@ -305,6 +329,19 @@ function qrPage(token, folder) {
   </div>
   <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
   <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
+  </div>
+  <button class="helpLink" onclick="openHelp()">Как пользоваться</button>
+  <div class="overlay" id="helpOverlay" onclick="if(event.target===this)closeHelp()">
+    <div class="sheet">
+      <h3>Как пользоваться PixPort</h3>
+      <ol>
+        <li><b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
+        <li><b>Наведи камеру телефона</b> на QR-код.</li>
+        <li><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
+      </ol>
+      <div class="note">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.</div>
+      <div class="closeRow"><button onclick="closeHelp()">Понятно</button></div>
+    </div>
   </div>
 
 <script>
@@ -382,7 +419,8 @@ setInterval(refresh, 1200);
 function die(msg) { dead = true; document.getElementById('status').textContent = msg; }
 
 function newQr() { location.href = '/api/new?t=' + token; }
-function closeQr() {
+function openHelp() { document.getElementById('helpOverlay').classList.add('open'); }
+function closeHelp() { document.getElementById('helpOverlay').classList.remove('open'); }function closeQr() {
   navigator.sendBeacon('/api/close?t=' + token);
   if (desktop) setTimeout(() => window.close(), 250);
   else die('QR закрыт — можно закрывать вкладку');
@@ -580,9 +618,26 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">В меню проводника</button>
 <div id="ms" style="color:var(--ok);font-size:13px;min-height:18px"></div>
 </div>
+<button id="helpLink" style="background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 8px">Как пользоваться</button>
+<div id="helpOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
+<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left">
+<div style="font-size:17px;font-weight:800;margin-bottom:12px">Как пользоваться PixPort</div>
+<ol style="margin:0 0 6px 20px;font-size:14px;line-height:1.65">
+<li><b>Выбери папку</b> — кнопкой выше, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
+<li><b>Наведи камеру телефона</b> на QR-код.</li>
+<li><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
+</ol>
+<div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:8px">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.</div>
+<div style="text-align:right;margin-top:14px"><button id="helpOk" style="font-size:14px">Понятно</button></div>
+</div>
+</div>
 <script>
 (function(){function s(){var d=document.documentElement.dataset.theme==='dark';document.getElementById('themeBtn').textContent=d?'☀️':'🌙';}
-document.getElementById('themeBtn').onclick=function(){var d=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=d?'dark':'light';try{localStorage.setItem('pixport-theme',d?'dark':'light');}catch(e){}s();};s();})();
+document.getElementById('themeBtn').onclick=function(){var d=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=d?'dark':'light';try{localStorage.setItem('pixport-theme',d?'dark':'light');}catch(e){}s();};s();
+var ov=document.getElementById('helpOverlay');
+document.getElementById('helpLink').onclick=function(){ov.style.display='flex';};
+document.getElementById('helpOk').onclick=function(){ov.style.display='none';};
+ov.onclick=function(e){if(e.target===ov)ov.style.display='none';};})();
 </script>
 <script>
 if (window.pixport) {
