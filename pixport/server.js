@@ -309,6 +309,11 @@ function qrPage(token, folder) {
     font-size:14px; font-weight:700; padding:9px 20px; border-radius:12px; cursor:pointer;
     border:0; background:var(--brand); color:var(--brand-ink);
   }
+  #menuBtn {
+    font-size:14px; font-weight:600; padding:10px 18px; border-radius:12px; cursor:pointer;
+    border:1px solid var(--line); background:var(--soft); color:var(--ink);
+  }
+  #menuBtn:disabled { opacity:.6; cursor:default; }
 </style>
 </head>
 <body>
@@ -325,12 +330,22 @@ function qrPage(token, folder) {
     <button onclick="closeQr()">Закрыть</button>
     <button onclick="openFolder()">Открыть папку</button>
     <button id="pickBtn" style="display:none" onclick="pickFolder()">Сменить папку</button>
-    <button id="menuBtn" style="display:none" onclick="toggleMenu()">В меню проводника</button>
+    <button id="settingsBtn" style="display:none" onclick="openSettings()">⚙ Настройки</button>
   </div>
   <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
   <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
   </div>
   <button class="helpLink" onclick="openHelp()">Как пользоваться</button>
+  <div class="overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+    <div class="sheet">
+      <h3>⚙ Настройки</h3>
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px">Пункт в меню проводника</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
+      <button id="menuBtn" style="display:none" onclick="toggleMenu()">В меню проводника</button>
+      <div id="menuMsg" style="font-size:13px;color:var(--ok);min-height:18px;margin-top:8px"></div>
+      <div class="closeRow"><button onclick="closeSettings()">Готово</button></div>
+    </div>
+  </div>
   <div class="overlay" id="helpOverlay" onclick="if(event.target===this)closeHelp()">
     <div class="sheet">
       <h3>Как пользоваться PixPort</h3>
@@ -366,11 +381,19 @@ const desktop = !!window.pixport;
 if (desktop) {
   document.getElementById('pickBtn').style.display = '';
   document.getElementById('dropHint').style.display = '';
-  document.getElementById('menuBtn').style.display = '';
-  refreshMenuBtn();
+  document.getElementById('settingsBtn').style.display = '';
 }
 
-// --- пункт в контекстном меню проводника ---
+// --- пункт в контекстном меню проводника (живёт в Настройках) ---
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.add('open');
+  if (desktop) {
+    document.getElementById('menuBtn').style.display = '';
+    refreshMenuBtn();
+  }
+}
+function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+
 async function refreshMenuBtn() {
   const b = document.getElementById('menuBtn');
   const on = await window.pixport.menuStatus();
@@ -381,24 +404,23 @@ async function refreshMenuBtn() {
 async function toggleMenu() {
   const b = document.getElementById('menuBtn');
   const removing = b.textContent.includes('Убрать'); // запоминаем ДО смены текста
+  const msg = document.getElementById('menuMsg');
   b.disabled = true;
   b.textContent = 'Секунду…';
   try {
     const r = await (removing ? window.pixport.menuRemove() : window.pixport.menuInstall());
-    const st = document.getElementById('status');
     if (r && r.ok) {
-      st.className = 'status';
-      st.innerHTML = removing
+      msg.style.color = 'var(--ok)';
+      msg.innerHTML = removing
         ? 'Пункт убран из контекстного меню'
         : '✓ Готово: правый клик по папке → <b>Показать QR</b>';
     } else {
-      st.className = 'status';
-      st.style.color = 'var(--err)';
-      st.textContent = 'Не получилось: ' + ((r && r.error) || 'неизвестно');
-      setTimeout(() => { st.style.color = ''; }, 4000);
+      msg.style.color = 'var(--err)';
+      msg.textContent = 'Не получилось: ' + ((r && r.error) || 'неизвестно');
     }
   } catch (e) {
-    document.getElementById('status').textContent = 'Ошибка: ' + e.message;
+    msg.style.color = 'var(--err)';
+    msg.textContent = 'Ошибка: ' + e.message;
   }
   b.disabled = false;
   await refreshMenuBtn();
@@ -420,7 +442,8 @@ function die(msg) { dead = true; document.getElementById('status').textContent =
 
 function newQr() { location.href = '/api/new?t=' + token; }
 function openHelp() { document.getElementById('helpOverlay').classList.add('open'); }
-function closeHelp() { document.getElementById('helpOverlay').classList.remove('open'); }function closeQr() {
+function closeHelp() { document.getElementById('helpOverlay').classList.remove('open'); }
+function closeQr() {
   navigator.sendBeacon('/api/close?t=' + token);
   if (desktop) setTimeout(() => window.close(), 250);
   else die('QR закрыт — можно закрывать вкладку');
@@ -615,8 +638,17 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <h2>Выбери папку для фото</h2>
 <p>Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
 <button id="b">📁 Выбрать папку</button>
+<button id="sbtn" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">⚙ Настройки</button>
+</div>
+<div id="setOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
+<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left">
+<div style="font-size:17px;font-weight:800;margin-bottom:12px">⚙ Настройки</div>
+<div style="font-size:14px;font-weight:700;margin-bottom:8px">Пункт в меню проводника</div>
+<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
 <button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px">В меню проводника</button>
-<div id="ms" style="color:var(--ok);font-size:13px;min-height:18px"></div>
+<div id="ms" style="color:var(--ok);font-size:13px;min-height:18px;margin-top:8px"></div>
+<div style="text-align:right;margin-top:14px"><button id="setOk" style="font-size:14px">Готово</button></div>
+</div>
 </div>
 <button id="helpLink" style="background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 8px">Как пользоваться</button>
 <div id="helpOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
@@ -646,9 +678,14 @@ if (window.pixport) {
     if (p) location.href = '/?folder=' + encodeURIComponent(p);
   };
 
-  // пункт контекстного меню
+  // пункт контекстного меню — в Настройках, чтобы не жали случайно
+  const sb = document.getElementById('sbtn');
+  sb.style.display = '';
   const mb = document.getElementById('mb'), ms = document.getElementById('ms');
-  mb.style.display = '';
+  const sov = document.getElementById('setOverlay');
+  sb.onclick = async () => { sov.style.display = 'flex'; mb.style.display = ''; sync(); };
+  document.getElementById('setOk').onclick = () => { sov.style.display = 'none'; };
+  sov.onclick = e => { if (e.target === sov) sov.style.display = 'none'; };
   async function sync() {
     const on = await window.pixport.menuStatus();
     mb.textContent = on ? 'Убрать из меню проводника' : 'В меню проводника';
