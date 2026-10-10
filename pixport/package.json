@@ -11,7 +11,9 @@
     "dist": "node build.js && node make-ico.js && \"%LOCALAPPDATA%\\Programs\\Inno Setup 6\\ISCC.exe\" installer.iss",
     "build:native": "g++ -O2 -static -static-libgcc -static-libstdc++ -o native/hotkey-helper.exe native/hotkey-helper.cpp -lole32 -loleaut32 -luuid -lshell32 && strip native/hotkey-helper.exe",
     "menu": "node install.js",
-    "menu:off": "node install.js uninstall"
+    "menu:off": "node install.js uninstall",
+    "key": "node genkey.js",
+    "test:license": "node test-license.js"
   },
   "license": "MIT",
   "dependencies": {

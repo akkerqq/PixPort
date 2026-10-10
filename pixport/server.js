@@ -21,6 +21,7 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const sharp = require('sharp');
 const Busboy = require('busboy');
+const { licenseState, activateKey, clearLicense, isPro } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
@@ -111,6 +112,7 @@ setInterval(() => {
 function uploadPage(token, folderName, lang) {
   const title = escapeHtml(folderName);
   const initLang = lang === 'en' ? 'en' : 'ru';
+  const plan = isPro() ? 'planPro' : 'planFree'; // статус рендерим сразу — телефон не ходит в /api/license (localhost)
   return `<!DOCTYPE html>
 <html lang="${initLang}">
 <head>
@@ -193,6 +195,7 @@ function uploadPage(token, folderName, lang) {
   <div class="card">
   <div class="folder">📁 ${title}</div>
   <div class="hint" data-i="upHint">Фото сразу попадут в папку на компьютере</div>
+  <div id="planBadge" data-i="${plan}" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:var(--soft);color:var(--muted);border:1px solid var(--line)">${plan === 'planPro' ? 'Pro · оригинал' : 'Бесплатно · 720p'}</div>
 
   <div class="btns">
     <label class="btn">
@@ -399,6 +402,13 @@ function qrPage(token, folder, net) {
         <button data-lang-btn="ru" onclick="setLang('ru')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">RU</button>
         <button data-lang-btn="en" onclick="setLang('en')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">EN</button>
       </div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="subTitle">Подписка PixPort</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="subDesc" data-i="subDescFree">Бесплатно: фото до 720p (1280 px). С ключом Pro — оригинальное качество без ограничений.</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px" id="subRow">
+        <input id="subKey" placeholder="PP-XXXXXX-XXXXXX-XXXXXX" style="flex:1;min-width:0;font-size:13px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-family:ui-monospace,monospace">
+        <button id="subBtn" onclick="subClick()" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
+      </div>
+      <div id="subMsg" style="font-size:13px;min-height:18px;margin-bottom:6px"></div>
       <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
       <button id="menuBtn" style="display:none" onclick="toggleMenu()" data-i="menuBtnAdd">В меню проводника</button>
@@ -455,6 +465,65 @@ function openSettings() {
     refreshMenuBtn();
   }
   loadIps();
+  loadSub();
+}
+
+/* --- подписка --- */
+async function loadSub() {
+  try {
+    const st = await (await fetch('/api/license?t=' + token)).json();
+    paintSub(!!st.pro);
+  } catch (e) {}
+}
+function paintSub(pro) {
+  const desc = document.getElementById('subDesc');
+  const row = document.getElementById('subRow');
+  const btn = document.getElementById('subBtn');
+  desc.dataset.i = pro ? 'subDescPro' : 'subDescFree';
+  desc.textContent = t(desc.dataset.i);
+  btn.dataset.i = pro ? 'subBtnOff' : 'subBtn'; // data-i, а не голый текст — иначе смена языка сотрёт состояние
+  btn.textContent = t(btn.dataset.i);
+  if (pro) {
+    row.style.display = 'none';
+    btn.style.display = '';
+  }
+}
+async function subClick() {
+  const msg = document.getElementById('subMsg');
+  const btn = document.getElementById('subBtn');
+  const st = await (await fetch('/api/license?t=' + token)).json();
+  if (st.pro) {
+    await fetch('/api/license/off?t=' + token, { method: 'POST' });
+    msg.style.color = 'var(--muted)';
+    msg.textContent = t('subOff');
+    document.getElementById('subRow').style.display = 'flex';
+    btn.textContent = t('subBtn');
+    document.getElementById('subDesc').dataset.i = 'subDescFree';
+    document.getElementById('subDesc').textContent = t('subDescFree');
+    return;
+  }
+  const key = document.getElementById('subKey').value.trim();
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/license?t=' + token, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key })
+    });
+    const s = await r.json();
+    if (s.ok || s.pro) {
+      msg.style.color = 'var(--ok)';
+      msg.textContent = t('subOk');
+      paintSub(true);
+    } else {
+      msg.style.color = 'var(--err)';
+      msg.textContent = t('subBad');
+    }
+  } catch (e) {
+    msg.style.color = 'var(--err)';
+    msg.textContent = t('subBad');
+  }
+  btn.disabled = false;
 }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
 
@@ -607,6 +676,13 @@ ru: {
   help3: '<b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.',
   helpNote: 'Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать.',
   btn_ok: 'Понятно', setTitle: '⚙ Настройки',
+  subTitle: 'Подписка PixPort',
+  subDescFree: 'Бесплатно: фото до 720p (1280 px). С ключом Pro — оригинальное качество без ограничений.',
+  subDescPro: 'Pro активировано: оригинальное качество фото без ограничений.',
+  subPlaceholder: 'PP-XXXXXX-XXXXXX-XXXXXX',
+  subBtn: 'Активировать', subBtnOff: 'Отключить Pro',
+  subOk: '✓ Pro активировано', subBad: 'Ключ не подходит', subOff: 'Возвращено в бесплатный режим',
+  planFree: 'Бесплатно · 720p', planPro: 'Pro · оригинал',
   netTitle: 'Подключение телефона',
   netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
   langTitle: 'Язык / Language',
@@ -646,6 +722,13 @@ en: {
   help3: '<b>Take a photo</b> or pick from gallery — it lands straight in the PC folder.',
   helpNote: 'Phone and PC must be on the same Wi-Fi. QR lives 30 minutes. Closing the window minimizes to tray — the hotkey keeps working.',
   btn_ok: 'Got it', setTitle: '⚙ Settings',
+  subTitle: 'PixPort subscription',
+  subDescFree: 'Free: photos up to 720p (1280 px). With a Pro key — original quality, no limits.',
+  subDescPro: 'Pro is active: original photo quality, no limits.',
+  subPlaceholder: 'PP-XXXXXX-XXXXXX-XXXXXX',
+  subBtn: 'Activate', subBtnOff: 'Turn off Pro',
+  subOk: '✓ Pro activated', subBad: 'Key not valid', subOff: 'Back to free mode',
+  planFree: 'Free · 720p', planPro: 'Pro · original',
   netTitle: 'Phone connection',
   netDesc: 'Multiple networks and the phone won\'t load? Pick another address, the QR regenerates.',
   langTitle: 'Язык / Language',
@@ -752,7 +835,14 @@ async function handleUpload(req, res, token) {
       const orig = info.filename || 'photo.jpg';
       try {
         // Всегда JPG: поворачиваем по EXIF (rotate без аргументов) и кодируем.
-        const jpg = await sharp(buf).rotate().jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+        // Free — потолок 720p (1280px по длинной стороне) и quality 82;
+        // Pro — оригинал без пережатия. Сжатие происходит здесь, на ПК,
+        // поэтому телефон и браузер ничего обойти не могут.
+        let img = sharp(buf).rotate();
+        if (!isPro()) {
+          img = img.resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true });
+        }
+        const jpg = await img.jpeg({ quality: isPro() ? 92 : 82, mozjpeg: true }).toBuffer();
         const fname = uniqueName(s.folder, '.jpg');
         fs.writeFileSync(path.join(s.folder, fname), jpg);
         saved = fname;
@@ -837,6 +927,21 @@ async function handleRequest(req, res) {
       if (s) openInBrowser(s.folder);
       return json(res, 200, { ok: true });
     }
+    /* --- подписка: статус и активация ключа --- */
+    if (url.pathname === '/api/license' && req.method === 'GET') {
+      const st = licenseState();
+      return json(res, 200, { ok: true, pro: st.pro });
+    }
+    if (url.pathname === '/api/license' && req.method === 'POST') {
+      const body = await readBody(req, 4 * 1024).catch(() => Buffer.alloc(0));
+      let key = '';
+      try { key = JSON.parse(body.toString('utf8') || '{}').key || ''; } catch (e) {}
+      const r = activateKey(key);
+      return json(res, r.ok || r.pro ? 200 : 400, r);
+    }
+    if (url.pathname === '/api/license/off' && req.method === 'POST') {
+      return json(res, 200, clearLicense());
+    }
     if (url.pathname === '/') {
       // окно QR: принимает папку через query, иначе последняя сессия
       const folder = resolveFolder(url.searchParams.get('folder')) ||
@@ -874,6 +979,13 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button data-lang-btn="ru" onclick="setLang('ru')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">RU</button>
 <button data-lang-btn="en" onclick="setLang('en')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">EN</button>
 </div>
+<div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="subTitle">Подписка PixPort</div>
+<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="subDesc" data-i="subDescFree">Бесплатно: фото до 720p (1280 px). С ключом Pro — оригинальное качество без ограничений.</div>
+<div style="display:flex;gap:8px;margin-bottom:8px" id="subRow">
+<input id="subKey" placeholder="PP-XXXXXX-XXXXXX-XXXXXX" style="flex:1;min-width:0;font-size:13px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-family:ui-monospace,monospace">
+<button id="subBtn" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
+</div>
+<div id="subMsg" style="font-size:13px;min-height:18px;margin-bottom:6px"></div>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
 <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
 <button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="menuBtnAdd">В меню проводника</button>
@@ -936,6 +1048,48 @@ if (window.pixport) {
     ms.style.color = r && r.ok ? 'var(--ok)' : 'var(--err)';
     mb.disabled = false; sync();
   };
+
+  // --- подписка ---
+  const subBtn = document.getElementById('subBtn');
+  const subMsg = document.getElementById('subMsg');
+  async function subSync() {
+    try {
+      const st = await (await fetch('/api/license')).json();
+      paintSub(!!st.pro);
+    } catch (e) {}
+  }
+  function paintSub(pro) {
+    const desc = document.getElementById('subDesc');
+    desc.dataset.i = pro ? 'subDescPro' : 'subDescFree';
+    desc.textContent = t(desc.dataset.i);
+    document.getElementById('subRow').style.display = pro ? 'none' : 'flex';
+    subBtn.dataset.on = pro ? '1' : '';
+    subBtn.dataset.i = pro ? 'subBtnOff' : 'subBtn'; // data-i, а не голый текст — иначе смена языка сотрёт состояние
+    subBtn.textContent = t(subBtn.dataset.i);
+  }
+  subBtn.onclick = async () => {
+    const pro = subBtn.dataset.on === '1';
+    if (pro) {
+      await fetch('/api/license/off', { method: 'POST' });
+      subMsg.style.color = 'var(--muted)';
+      subMsg.textContent = t('subOff');
+      paintSub(false);
+      return;
+    }
+    subBtn.disabled = true;
+    try {
+      const r = await fetch('/api/license', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: document.getElementById('subKey').value.trim() })
+      });
+      const s = await r.json();
+      if (s.ok || s.pro) { subMsg.style.color = 'var(--ok)'; subMsg.textContent = t('subOk'); paintSub(true); }
+      else { subMsg.style.color = 'var(--err)'; subMsg.textContent = t('subBad'); }
+    } catch (e) { subMsg.style.color = 'var(--err)'; subMsg.textContent = t('subBad'); }
+    subBtn.disabled = false;
+  };
+  subSync();
+
   sync();
 
   window.addEventListener('dragover', e => e.preventDefault());
