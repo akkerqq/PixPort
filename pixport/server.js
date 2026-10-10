@@ -31,15 +31,29 @@ const sessions = new Map();
 
 /* ---------------------------------------------------------------- утилиты */
 
-/** Локальный IP, по которому телефон достучится до ПК. */
+/** Локальный IP, по которому телефон достучится до ПК.
+ *
+ * Ловушка: в Windows есть виртуальные адаптеры («Мобильная точка доступа»,
+ * Wi-Fi Direct) — они висят с заглушечным адресом 169.254.x.x (DHCP не ответил).
+ * Если брать первый попавшийся IPv4 — QR ведёт на мёртвый адрес, и телефон
+ * просто таймаутит. Так и было у друга Аккера. Отфильтровываем:
+ *  1. всё 169.254.* (APIPA) — не считаем;
+ *  2. предпочитаем приватные диапазоны реальных сетей (192.168.*, 10.*);
+ *  3. иначе — первый незаглушечный.
+ */
 function lanIp() {
   const ifs = os.networkInterfaces();
+  const fallback = [];
   for (const name of Object.keys(ifs)) {
     for (const it of ifs[name] || []) {
-      if (it.family === 'IPv4' && !it.internal) return it.address;
+      if (it.family !== 'IPv4' || it.internal) continue;
+      const a = it.address;
+      if (a.startsWith('169.254.')) continue; // заглушка — телефон туда не достучится
+      if (a.startsWith('192.168.') || a.startsWith('10.')) return a; // настоящая сеть
+      fallback.push(a);
     }
   }
-  return '127.0.0.1';
+  return fallback[0] || '127.0.0.1';
 }
 
 function isLoopback(req) {
@@ -225,7 +239,11 @@ if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
 </html>`;
 }
 
-function qrPage(token, folder) {
+function qrPage(token, folder, net) {
+  const netWarn = net && net.ok ? '' :
+    `<div class="netwarn">⚠ Нет подключения к локальной сети — телефон не сможет загрузить фото. Проверь Wi-Fi на компьютере.</div>`;
+  const netHint = net && net.ok ?
+    `<div class="hint">Телефон подключается к ${escapeHtml(net.ip)} · оба должны быть в одном Wi-Fi</div>` : '';
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -285,6 +303,10 @@ function qrPage(token, folder) {
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
+  .netwarn {
+    font-size:13px; color:var(--err); border:1px solid var(--err);
+    border-radius:12px; padding:10px 14px; text-align:center; max-width:100%; line-height:1.5;
+  }
   .helpLink {
     background:none; border:0; color:var(--muted); font-size:12.5px; cursor:pointer;
     text-decoration:underline; text-underline-offset:3px; padding:4px 8px;
@@ -323,6 +345,7 @@ function qrPage(token, folder) {
   </div>
   <div class="card">
   <div class="folder">📷 ${escapeHtml(folder)}</div>
+  ${netWarn}
   <div id="qr"><img id="qrimg" alt="QR"></div>
   <div class="status" id="status">Ожидание телефона…</div>
   <div class="actions">
@@ -333,6 +356,7 @@ function qrPage(token, folder) {
     <button id="settingsBtn" style="display:none" onclick="openSettings()">⚙ Настройки</button>
   </div>
   <div class="hint">Сканируй камерой телефона · код живёт 30 минут</div>
+  ${netHint}
   <div class="hint" id="dropHint" style="display:none">…или перетащи папку сюда</div>
   </div>
   <button class="helpLink" onclick="openHelp()">Как пользоваться</button>
@@ -718,7 +742,8 @@ if (window.pixport) {
       }
       const token = createSession(folder);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      return res.end(qrPage(token, folder));
+      const ip = lanIp();
+      return res.end(qrPage(token, folder, { ok: ip !== '127.0.0.1', ip }));
     }
   }
 
