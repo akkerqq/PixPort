@@ -347,11 +347,13 @@ function qrPage(token, folder, net) {
   .actions button:hover { filter:brightness(.97); }
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
-  /* при наведении на кнопке проступает QR-текстура — просто для красоты */
+  /* при наведении на кнопке проступает крупный QR и едет за курсором */
   .actions button::after {
     content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-    background:url(/assets/qrtex-dark.png) center/26px 26px repeat;
-    opacity:0; transition:opacity .25s ease;
+    background:url(/assets/qrtex-dark.png) no-repeat;
+    background-size:200px 200px;
+    background-position:var(--qx, 50%) var(--qy, 50%);
+    opacity:0; transition:opacity .25s ease, background-position .35s ease-out;
   }
   .actions button:hover::after { opacity:.16; }
   [data-theme="dark"] .actions button::after { background-image:url(/assets/qrtex-light.png); }
@@ -732,6 +734,15 @@ loadQr(null);
 window.__fitSoon = () => setTimeout(fitWin, 50);
 fitWin(); // окно ровно под контент, без скролла
 setTimeout(fitWin, 1200); // добор после устаканивания шрифтов
+// QR-текстура на кнопках едет за курсором (позиция — в CSS-переменных,
+// transition на background-position даёт плавное отставание)
+document.querySelectorAll('.actions button').forEach(b => {
+  b.addEventListener('mousemove', e => {
+    const r = b.getBoundingClientRect();
+    b.style.setProperty('--qx', ((e.clientX - r.left) / r.width * 100).toFixed(1) + '%');
+    b.style.setProperty('--qy', ((e.clientY - r.top) / r.height * 100).toFixed(1) + '%');
+  });
+});
 </script>
 </body>
 </html>`;
