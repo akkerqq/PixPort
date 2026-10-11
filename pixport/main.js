@@ -244,3 +244,12 @@ ipcMain.handle('open-url', (e, url) => {
   const u = String(url || '');
   if (u.startsWith(`https://github.com/${UPDATE_REPO}/releases`)) shell.openExternal(u);
 });
+
+/* --- автозапуск Windows (галочка в настройках) --- */
+
+const autostart = require('./autostart.js');
+ipcMain.handle('autostart-status', () => autostart.isEnabled());
+ipcMain.handle('autostart-set', (e, on) => {
+  try { return autostart.setEnabled(!!on, menuTarget()); }
+  catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
+});

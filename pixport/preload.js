@@ -16,5 +16,8 @@ contextBridge.exposeInMainWorld('pixport', {
   menuRemove: () => ipcRenderer.invoke('menu-remove'),
   /** Открыть ссылку на релиз в браузере (main.js проверяет адрес). */
   openUrl: url => ipcRenderer.invoke('open-url', url),
+  /** Автозапуск Windows. */
+  autostartStatus: () => ipcRenderer.invoke('autostart-status'),
+  autostartSet: on => ipcRenderer.invoke('autostart-set', on),
   isDesktop: true,
 });

@@ -47,6 +47,7 @@ function postForm(url, filename, buf) {
   // 1. открыть окно QR
   const page = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
   check('окно QR отдаёт 200', page.code === 200);
+  check('галочка автозапуска в окне QR', page.body.includes('id="autoChk"') && page.body.includes('autostartSet'));
   const token = (page.body.match(/const token = '([^']+)'/) || [])[1];
   check('токен извлечён', !!token, token || 'нет');
 
@@ -57,6 +58,7 @@ function postForm(url, filename, buf) {
   // 3. страница телефона
   const up = await get(`${BASE}/u?t=${token}`);
   check('страница загрузки 200', up.code === 200 && up.body.includes('Снять фото'));
+  check('прогресс-бар на телефоне', up.body.includes('id="upBar"') && up.body.includes('upload.onprogress'));
 
   // 4. отправка фото (портрет с EXIF-поворотом, 1000x1500)
   const jpg = await sharp({

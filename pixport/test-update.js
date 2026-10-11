@@ -89,6 +89,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (t) await get(`http://127.0.0.1:${APP_PORT}/api/close?t=${t}`);
     const pick = await get(`http://127.0.0.1:${APP_PORT}/`);
     check('секция обновлений в окне выбора папки', pick.body.includes('id="updStatus"') && pick.body.includes('id="updDl"'));
+    check('галочка автозапуска в окне выбора папки', pick.body.includes('id="autoChk"') && pick.body.includes('autostartSet'));
   } finally {
     srv.kill();
     stub.close();

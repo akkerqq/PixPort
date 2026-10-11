@@ -213,6 +213,8 @@ function uploadPage(token, folderName, lang) {
   </div>
 
   <div id="status"></div>
+  <div id="upWrap" style="display:none;width:100%;max-width:320px;background:var(--soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;height:10px"><div id="upBar" style="height:100%;width:0%;background:var(--brand);border-radius:999px"></div></div>
+  <div id="upPct" style="display:none;font-size:12px;color:var(--muted)"></div>
   </div>
   <div class="foot" data-i="foot">PixPort · без проводов и мессенджеров</div>
 
@@ -240,20 +242,34 @@ async function send(files) {
   if (!files || !files.length || sending) return;
   sending = true;
   const st = document.getElementById('status');
+  const wrap = document.getElementById('upWrap');
+  const bar = document.getElementById('upBar');
+  const pct = document.getElementById('upPct');
   st.className = 'show';
+  const setPct = p => { bar.style.width = p + '%'; pct.textContent = p + '%'; };
   for (const f of files) {
     st.textContent = t('sending', { f: f.name });
+    wrap.style.display = ''; pct.style.display = ''; setPct(0);
     try {
-      const fd = new FormData();
-      fd.append('file', f, f.name);
-      const r = await fetch('/u?t=${token}', { method: 'POST', body: fd });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      // fetch процентов загрузки не даёт — шлём через XHR ради прогресса
+      await new Promise((resolve, reject) => {
+        const fd = new FormData();
+        fd.append('file', f, f.name);
+        const x = new XMLHttpRequest();
+        x.open('POST', '/u?t=${token}');
+        x.upload.onprogress = e => { if (e.lengthComputable) setPct(Math.round(e.loaded / e.total * 100)); };
+        x.onload = () => (x.status >= 200 && x.status < 300) ? resolve() : reject(new Error('HTTP ' + x.status));
+        x.onerror = () => reject(new Error('net'));
+        x.send(fd);
+      });
       total++;
       st.className = 'show';
       st.innerHTML = '<div class="count">' + t('sent', { n: total }) + '</div>';
+      wrap.style.display = 'none'; pct.style.display = 'none';
     } catch (e) {
       st.className = 'show err';
       st.textContent = t('sendErr', { e: e.message });
+      wrap.style.display = 'none'; pct.style.display = 'none';
       sending = false;
       return;
     }
@@ -419,6 +435,10 @@ function qrPage(token, folder, net) {
         <button id="updBtn" onclick="updCheck()" style="font-size:13px;padding:9px 16px" data-i="updCheck">Проверить</button>
         <button id="updDl" onclick="updGo()" style="display:none;font-size:13px;padding:9px 16px" data-i="updDl">Скачать</button>
       </div>
+      <label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="autoChk" style="width:18px;height:18px;accent-color:var(--brand)">
+        <span data-i="autoStart">Запускаться вместе с Windows</span>
+      </label>
       <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
       <button id="menuBtn" style="display:none" onclick="toggleMenu()" data-i="menuBtnAdd">В меню проводника</button>
@@ -473,9 +493,20 @@ function openSettings() {
   if (desktop) {
     document.getElementById('menuBtn').style.display = '';
     refreshMenuBtn();
+    autoSync();
   }
   loadIps();
   loadSub();
+}
+
+/* --- автозапуск --- */
+async function autoSync() {
+  const c = document.getElementById('autoChk');
+  try { c.checked = !!(await window.pixport.autostartStatus()); } catch (e) {}
+  c.onchange = async () => {
+    const r = await window.pixport.autostartSet(c.checked).catch(() => null);
+    if (!r || !r.ok) c.checked = !c.checked; // не вышло — вернуть как было
+  };
 }
 
 /* --- подписка --- */
@@ -721,6 +752,7 @@ ru: {
   subBtn: 'Активировать', subBtnOff: 'Отключить Pro',
   subOk: '✓ Pro активировано', subBad: 'Ключ не подходит', subOff: 'Возвращено в бесплатный режим',
   planFree: 'Бесплатно · 960px', planPro: 'Pro · оригинал',
+  autoStart: 'Запускаться вместе с Windows',
   updTitle: 'Обновления',
   updIdle: 'Нажми «Проверить» — сравним твою версию с GitHub.',
   updCheck: 'Проверить', updDl: 'Скачать',
@@ -773,6 +805,7 @@ en: {
   subBtn: 'Activate', subBtnOff: 'Turn off Pro',
   subOk: '✓ Pro activated', subBad: 'Key not valid', subOff: 'Back to free mode',
   planFree: 'Free · 960px', planPro: 'Pro · original',
+  autoStart: 'Start with Windows',
   updTitle: 'Updates',
   updIdle: 'Hit “Check” — we compare your version with GitHub.',
   updCheck: 'Check', updDl: 'Download',
@@ -1111,6 +1144,10 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button id="updBtn" style="font-size:13px;padding:9px 16px" data-i="updCheck">Проверить</button>
 <button id="updDl" style="display:none;font-size:13px;padding:9px 16px" data-i="updDl">Скачать</button>
 </div>
+<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin-bottom:14px;cursor:pointer">
+<input type="checkbox" id="autoChk" style="width:18px;height:18px;accent-color:var(--brand)">
+<span data-i="autoStart">Запускаться вместе с Windows</span>
+</label>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
 <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
 <button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="menuBtnAdd">В меню проводника</button>
@@ -1243,6 +1280,14 @@ if (window.pixport) {
     else location.href = updUrl;
   };
   updCheck(true); // тихая проверка при открытии окна
+
+  // --- автозапуск ---
+  const autoChk = document.getElementById('autoChk');
+  (async () => { try { autoChk.checked = !!(await window.pixport.autostartStatus()); } catch (e) {} })();
+  autoChk.onchange = async () => {
+    const r = await window.pixport.autostartSet(autoChk.checked).catch(() => null);
+    if (!r || !r.ok) autoChk.checked = !autoChk.checked; // не вышло — вернуть как было
+  };
 
   sync();
 
