@@ -403,7 +403,7 @@ function qrPage(token, folder, net) {
   <div id="qr"><img id="qrimg" alt="QR"></div>
   <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
   <div class="actions">
-    <button onclick="newQr()" data-i="btn_new">Новый QR</button>
+    <button onclick="newQr()" data-i="btn_new" style="font-size:15.5px;padding:11px 24px">Новый QR</button>
   </div>
   <div class="actions" style="margin-top:0">
     <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
