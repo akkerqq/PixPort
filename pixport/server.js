@@ -25,7 +25,7 @@ const { licenseState, activateKey, clearLicense, isPro } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
-const APP_VERSION = '0.1.2'; // видна в окне — по ней проверяем, та ли сборка
+const APP_VERSION = '0.1.3'; // видна в окне — по ней проверяем, та ли сборка
 const TOKEN_TTL = 30 * 60 * 1000; // 30 минут — жёсткий предел жизни QR
 
 /** Активные сессии: token -> { folder, created, received, closed } */
