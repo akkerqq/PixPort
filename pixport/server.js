@@ -405,7 +405,7 @@ function qrPage(token, folder, net) {
   <div class="actions">
     <button onclick="newQr()" data-i="btn_new">Новый QR</button>
   </div>
-  <div class="actions">
+  <div class="actions" style="margin-top:0">
     <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
     <button id="pickBtn" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
   </div>
