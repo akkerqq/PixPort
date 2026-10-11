@@ -12,6 +12,7 @@
  */
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -25,7 +26,10 @@ const { licenseState, activateKey, clearLicense, isPro } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
-const APP_VERSION = '0.1.5'; // видна в окне — по ней проверяем, та ли сборка
+const APP_VERSION = '0.1.6'; // видна в окне — по ней проверяем, та ли сборка
+// GitHub-репозиторий релизов: проверка обновлений тянет
+// https://api.github.com/repos/<repo>/releases/latest (тег vX.Y.Z + Setup-*.exe).
+const UPDATE_REPO = 'akkerqq/PixPort';
 const TOKEN_TTL = 30 * 60 * 1000; // 30 минут — жёсткий предел жизни QR
 
 /** Активные сессии: token -> { folder, created, received, closed } */
@@ -409,6 +413,12 @@ function qrPage(token, folder, net) {
         <button id="subBtn" onclick="subClick()" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
       </div>
       <div id="subMsg" style="font-size:13px;min-height:18px;margin-bottom:6px"></div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="updTitle">Обновления</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="updStatus" data-i="updIdle">Нажми «Проверить» — сравним твою версию с GitHub.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button id="updBtn" onclick="updCheck()" style="font-size:13px;padding:9px 16px" data-i="updCheck">Проверить</button>
+        <button id="updDl" onclick="updGo()" style="display:none;font-size:13px;padding:9px 16px" data-i="updDl">Скачать</button>
+      </div>
       <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
       <button id="menuBtn" style="display:none" onclick="toggleMenu()" data-i="menuBtnAdd">В меню проводника</button>
@@ -526,6 +536,34 @@ async function subClick() {
   btn.disabled = false;
 }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+
+/* --- обновления с GitHub --- */
+let updUrl = '';
+async function updCheck(silent) {
+  const st = document.getElementById('updStatus');
+  const dl = document.getElementById('updDl');
+  const btn = document.getElementById('updBtn');
+  if (!silent) { btn.disabled = true; st.textContent = t('wait'); }
+  try {
+    const r = await (await fetch('/api/update?t=' + token)).json();
+    if (!r.ok) { if (!silent) st.textContent = t('updFail'); }
+    else if (r.update) {
+      st.textContent = t('updAvailable', { v: r.latest });
+      updUrl = r.url || '';
+      dl.style.display = '';
+    } else {
+      st.textContent = t('updLatest', { v: r.current });
+      dl.style.display = 'none';
+    }
+  } catch (e) { if (!silent) st.textContent = t('updFail'); }
+  btn.disabled = false;
+}
+function updGo() {
+  if (!updUrl) return;
+  if (window.pixport && window.pixport.openUrl) window.pixport.openUrl(updUrl);
+  else location.href = updUrl;
+}
+if (desktop) updCheck(true); // тихая проверка при открытии окна
 
 async function refreshMenuBtn() {
   const b = document.getElementById('menuBtn');
@@ -683,6 +721,12 @@ ru: {
   subBtn: 'Активировать', subBtnOff: 'Отключить Pro',
   subOk: '✓ Pro активировано', subBad: 'Ключ не подходит', subOff: 'Возвращено в бесплатный режим',
   planFree: 'Бесплатно · 720p', planPro: 'Pro · оригинал',
+  updTitle: 'Обновления',
+  updIdle: 'Нажми «Проверить» — сравним твою версию с GitHub.',
+  updCheck: 'Проверить', updDl: 'Скачать',
+  updLatest: 'У тебя последняя версия ({v})',
+  updAvailable: 'Вышла {v} — жми «Скачать»',
+  updFail: 'Не удалось проверить (нет сети?)',
   netTitle: 'Подключение телефона',
   netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
   langTitle: 'Язык / Language',
@@ -729,6 +773,12 @@ en: {
   subBtn: 'Activate', subBtnOff: 'Turn off Pro',
   subOk: '✓ Pro activated', subBad: 'Key not valid', subOff: 'Back to free mode',
   planFree: 'Free · 720p', planPro: 'Pro · original',
+  updTitle: 'Updates',
+  updIdle: 'Hit “Check” — we compare your version with GitHub.',
+  updCheck: 'Check', updDl: 'Download',
+  updLatest: 'You are up to date ({v})',
+  updAvailable: '{v} is out — hit “Download”',
+  updFail: 'Could not check (offline?)',
   netTitle: 'Phone connection',
   netDesc: 'Multiple networks and the phone won\'t load? Pick another address, the QR regenerates.',
   langTitle: 'Язык / Language',
@@ -886,6 +936,60 @@ function resolveFolder(p) {
   return null;
 }
 
+/* ------------------------------------------------- проверка обновлений */
+
+function updateApiUrl() {
+  // PIXPORT_UPDATE_URL — только для тестов (подмена GitHub стабом)
+  return process.env.PIXPORT_UPDATE_URL ||
+    `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+}
+
+// GET JSON с таймаутом. http(s) выбираем по схеме — стаб в тестах обычный http.
+function fetchJson(u, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const lib = String(u).startsWith('https') ? https : http;
+    const req = lib.get(u, {
+      headers: { 'User-Agent': 'PixPort', 'Accept': 'application/vnd.github+json' },
+      timeout: timeoutMs,
+    }, r => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => {
+        try { resolve({ code: r.statusCode, data: JSON.parse(d) }); }
+        catch (e) { reject(new Error('bad json')); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+  });
+}
+
+// Сравнение версий вида '0.1.5': 1 если a>b, -1 если a<b, 0 если равны
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x > y ? 1 : -1;
+  }
+  return 0;
+}
+
+// Свежая версия на GitHub новее нашей? Без сети — { ok:false }, молча.
+async function checkUpdate() {
+  try {
+    const { code, data } = await fetchJson(updateApiUrl());
+    if (code !== 200 || !data || !data.tag_name) return { ok: false, error: 'net' };
+    const latest = String(data.tag_name).replace(/^v/, '');
+    if (cmpVer(latest, APP_VERSION) <= 0)
+      return { ok: true, update: false, current: APP_VERSION, latest };
+    const asset = (data.assets || []).find(a => /^PixPort-Setup-.*\.exe$/.test(a.name || ''));
+    const dl = (asset && asset.browser_download_url) || data.html_url || '';
+    return { ok: true, update: true, current: APP_VERSION, latest, url: dl };
+  } catch (e) {
+    return { ok: false, error: 'net' };
+  }
+}
+
 async function handleRequest(req, res) {
   const url = new URL(req.url, 'http://x');
   const q = url.searchParams.get('t') || '';
@@ -950,6 +1054,10 @@ async function handleRequest(req, res) {
     if (url.pathname === '/api/license/off' && req.method === 'POST') {
       return json(res, 200, clearLicense());
     }
+    /* --- обновления: есть ли релиз новее на GitHub --- */
+    if (url.pathname === '/api/update' && req.method === 'GET') {
+      return json(res, 200, await checkUpdate());
+    }
     if (url.pathname === '/') {
       // окно QR: принимает папку через query, иначе последняя сессия
       const folder = resolveFolder(url.searchParams.get('folder')) ||
@@ -994,6 +1102,12 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button id="subBtn" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
 </div>
 <div id="subMsg" style="font-size:13px;min-height:18px;margin-bottom:6px"></div>
+<div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="updTitle">Обновления</div>
+<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="updStatus" data-i="updIdle">Нажми «Проверить» — сравним твою версию с GitHub.</div>
+<div style="display:flex;gap:8px;margin-bottom:14px">
+<button id="updBtn" style="font-size:13px;padding:9px 16px" data-i="updCheck">Проверить</button>
+<button id="updDl" style="display:none;font-size:13px;padding:9px 16px" data-i="updDl">Скачать</button>
+</div>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="menuTitle">Пункт в меню проводника</div>
 <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:12px" data-i="menuDesc">Добавляет «Показать QR» в правый клик по папке. Трогать нужно один раз — дальше оно просто работает.</div>
 <button id="mb" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="menuBtnAdd">В меню проводника</button>
@@ -1098,6 +1212,35 @@ if (window.pixport) {
   };
   subSync();
 
+  // --- обновления с GitHub ---
+  const updBtn = document.getElementById('updBtn');
+  const updDl = document.getElementById('updDl');
+  const updStatus = document.getElementById('updStatus');
+  let updUrl = '';
+  async function updCheck(silent) {
+    if (!silent) { updBtn.disabled = true; updStatus.textContent = t('wait'); }
+    try {
+      const r = await (await fetch('/api/update')).json();
+      if (!r.ok) { if (!silent) updStatus.textContent = t('updFail'); }
+      else if (r.update) {
+        updStatus.textContent = t('updAvailable', { v: r.latest });
+        updUrl = r.url || '';
+        updDl.style.display = '';
+      } else {
+        updStatus.textContent = t('updLatest', { v: r.current });
+        updDl.style.display = 'none';
+      }
+    } catch (e) { if (!silent) updStatus.textContent = t('updFail'); }
+    updBtn.disabled = false;
+  }
+  updBtn.onclick = () => updCheck(false);
+  updDl.onclick = () => {
+    if (!updUrl) return;
+    if (window.pixport && window.pixport.openUrl) window.pixport.openUrl(updUrl);
+    else location.href = updUrl;
+  };
+  updCheck(true); // тихая проверка при открытии окна
+
   sync();
 
   window.addEventListener('dragover', e => e.preventDefault());
@@ -1183,4 +1326,4 @@ async function start({ openBrowser = true } = {}) {
 // запуск из консоли: node server.js "C:\папка"
 if (require.main === module) start({ openBrowser: true });
 
-module.exports = { start, lanIp, lanIps, PORT, resolveFolder };
+module.exports = { start, lanIp, lanIps, PORT, resolveFolder, APP_VERSION, UPDATE_REPO };

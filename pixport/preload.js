@@ -14,5 +14,7 @@ contextBridge.exposeInMainWorld('pixport', {
   menuStatus: () => ipcRenderer.invoke('menu-status'),
   menuInstall: () => ipcRenderer.invoke('menu-install'),
   menuRemove: () => ipcRenderer.invoke('menu-remove'),
+  /** Открыть ссылку на релиз в браузере (main.js проверяет адрес). */
+  openUrl: url => ipcRenderer.invoke('open-url', url),
   isDesktop: true,
 });

@@ -9,7 +9,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut, Tray, Menu, 
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { start, PORT, resolveFolder } = require('./server.js');
+const { start, PORT, resolveFolder, UPDATE_REPO } = require('./server.js');
 const menu = require('./menu.js');
 const { currentExplorerFolder } = require('./hotkey.js');
 
@@ -238,3 +238,9 @@ function menuTarget() {
 ipcMain.handle('menu-status', () => menu.isInstalled());
 ipcMain.handle('menu-install', () => { try { return menu.install(menuTarget()); } catch (e) { return { ok: false, error: e.message }; } });
 ipcMain.handle('menu-remove', () => { try { return menu.uninstall(); } catch (e) { return { ok: false, error: e.message }; } });
+
+// открыть ссылку на релиз в браузере — только наш GitHub, всё остальное игнор
+ipcMain.handle('open-url', (e, url) => {
+  const u = String(url || '');
+  if (u.startsWith(`https://github.com/${UPDATE_REPO}/releases`)) shell.openExternal(u);
+});
