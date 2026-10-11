@@ -404,6 +404,8 @@ function qrPage(token, folder, net) {
   <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
   <div class="actions">
     <button onclick="newQr()" data-i="btn_new">Новый QR</button>
+  </div>
+  <div class="actions">
     <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
     <button id="pickBtn" style="display:none" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
   </div>
