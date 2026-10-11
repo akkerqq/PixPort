@@ -26,7 +26,7 @@ const { licenseState, activateKey, clearLicense, isPro } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
-const APP_VERSION = '0.2.4'; // видна в окне — по ней проверяем, та ли сборка
+const APP_VERSION = '0.2.5'; // видна в окне — по ней проверяем, та ли сборка
 // GitHub-репозиторий релизов: проверка обновлений тянет
 // https://api.github.com/repos/<repo>/releases/latest (тег vX.Y.Z + Setup-*.exe).
 const UPDATE_REPO = 'akkerqq/PixPort';
