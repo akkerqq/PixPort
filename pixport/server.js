@@ -349,19 +349,10 @@ function qrPage(token, folder, net) {
   .actions button {
     font-size:13.5px; font-weight:600; padding:9px 15px; border-radius:12px; cursor:pointer;
     border:1px solid var(--line); background:var(--soft); color:var(--ink);
-    transition:transform .15s ease, background-color .25s ease, color .25s ease, border-color .25s ease;
+    transition:transform .15s ease, filter .15s;
     position:relative; overflow:hidden;
   }
-  /* инверсия при наведении: приглушённая (был вырвиглаз — смягчили) */
-  .actions button:hover { background:#4c539e; border-color:#4c539e; color:#fff; transform:scale(1.05); }
-  /* зеркально в тёмной теме */
-  [data-theme="dark"] .actions button:hover { background:#c9cede; border-color:#c9cede; color:#181b2e; }
-  #newQrBtn:hover { --tex:url(/assets/qrtex-light.png); }
-  #openBtn:hover { --tex:url(/assets/folder-light.png); }
-  #pickBtn:hover { --tex:url(/assets/swap-light.png); }
-  [data-theme="dark"] #newQrBtn:hover { --tex:url(/assets/qrtex-dark.png); }
-  [data-theme="dark"] #openBtn:hover { --tex:url(/assets/folder-dark.png); }
-  [data-theme="dark"] #pickBtn:hover { --tex:url(/assets/swap-dark.png); }
+  .actions button:hover { filter:brightness(.97); transform:scale(1.05); }
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
   /* текстура каждой кнопки — своя переменная */
@@ -380,7 +371,7 @@ function qrPage(token, folder, net) {
     background-position:var(--qx, 50%) var(--qy, 50%);
     opacity:0; transition:opacity .25s ease, background-position .35s ease-out;
   }
-  .actions button:hover::after { opacity:.18; }
+  .actions button:hover::after { opacity:.16; }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
   .ipRow { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   .ipRow button {
