@@ -546,7 +546,7 @@ async function updCheck(silent) {
   if (!silent) { btn.disabled = true; st.textContent = t('wait'); }
   try {
     const r = await (await fetch('/api/update?t=' + token)).json();
-    if (!r.ok) { if (!silent) st.textContent = t('updFail'); }
+    if (!r.ok) { if (!silent) st.textContent = t(r.error === 'empty' ? 'updEmpty' : 'updFail'); }
     else if (r.update) {
       st.textContent = t('updAvailable', { v: r.latest });
       updUrl = r.url || '';
@@ -727,7 +727,7 @@ ru: {
   updLatest: 'У тебя последняя версия ({v})',
   updAvailable: 'Вышла {v} — жми «Скачать»',
   updFail: 'Не удалось проверить (нет сети?)',
-  netTitle: 'Подключение телефона',
+  updEmpty: 'Релизов пока нет — загляни позже',  netTitle: 'Подключение телефона',
   netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
   langTitle: 'Язык / Language',
   menuTitle: 'Пункт в меню проводника',
@@ -779,6 +779,7 @@ en: {
   updLatest: 'You are up to date ({v})',
   updAvailable: '{v} is out — hit “Download”',
   updFail: 'Could not check (offline?)',
+  updEmpty: 'No releases yet — check back later',
   netTitle: 'Phone connection',
   netDesc: 'Multiple networks and the phone won\'t load? Pick another address, the QR regenerates.',
   langTitle: 'Язык / Language',
@@ -978,6 +979,7 @@ function cmpVer(a, b) {
 async function checkUpdate() {
   try {
     const { code, data } = await fetchJson(updateApiUrl());
+    if (code === 404) return { ok: false, error: 'empty' }; // репозиторий есть, релизов ещё нет
     if (code !== 200 || !data || !data.tag_name) return { ok: false, error: 'net' };
     const latest = String(data.tag_name).replace(/^v/, '');
     if (cmpVer(latest, APP_VERSION) <= 0)
@@ -1221,7 +1223,7 @@ if (window.pixport) {
     if (!silent) { updBtn.disabled = true; updStatus.textContent = t('wait'); }
     try {
       const r = await (await fetch('/api/update')).json();
-      if (!r.ok) { if (!silent) updStatus.textContent = t('updFail'); }
+      if (!r.ok) { if (!silent) updStatus.textContent = t(r.error === 'empty' ? 'updEmpty' : 'updFail'); }
       else if (r.update) {
         updStatus.textContent = t('updAvailable', { v: r.latest });
         updUrl = r.url || '';

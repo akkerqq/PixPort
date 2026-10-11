@@ -10,17 +10,19 @@ const APP_PORT = 8765;
 const FOLDER = process.argv[2];
 
 let tag = 'v9.9.9'; // стаб отдаёт его как tag_name свежего релиза
-let stubUp = true;
+let stubMode = 'ok'; // ok | down | empty404
 
 const stub = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname === '/set') { // управление стабом из теста: /set?tag=v1.2.3 / /set?down=1
-    if (u.searchParams.get('down') === '1') { stubUp = false; }
-    else { stubUp = true; tag = u.searchParams.get('tag') || tag; }
+  if (u.pathname === '/set') { // управление стабом из теста: /set?tag=v1.2.3 / /set?down=1 / /set?empty=1
+    if (u.searchParams.get('down') === '1') stubMode = 'down';
+    else if (u.searchParams.get('empty') === '1') stubMode = 'empty404';
+    else { stubMode = 'ok'; tag = u.searchParams.get('tag') || tag; }
     res.end('ok');
     return;
   }
-  if (!stubUp) { res.writeHead(500); res.end('down'); return; }
+  if (stubMode === 'down') { res.writeHead(500); res.end('down'); return; }
+  if (stubMode === 'empty404') { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"message":"Not Found"}'); return; }
   if (u.pathname === '/releases/latest') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -74,7 +76,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     // 3. GitHub лёг → ok:false, а не падение
     await get(`http://127.0.0.1:${STUB_PORT}/set?down=1`);
     const u3 = JSON.parse((await get(`http://127.0.0.1:${APP_PORT}/api/update`)).body);
-    check('без сети → ok:false', u3.ok === false, JSON.stringify(u3));
+    check('без сети → ok:false', u3.ok === false && u3.error === 'net', JSON.stringify(u3));
+
+    // 3б. релизов ещё нет (404, как сейчас на живом GitHub) → error:'empty'
+    await get(`http://127.0.0.1:${STUB_PORT}/set?empty=1`);
+    const u3b = JSON.parse((await get(`http://127.0.0.1:${APP_PORT}/api/update`)).body);
+    check('нет релизов → error:empty', u3b.ok === false && u3b.error === 'empty', JSON.stringify(u3b));
 
     // 4. секция есть и в окне «Выбери папку»
     await get(`http://127.0.0.1:${STUB_PORT}/set?tag=v9.9.9`);
