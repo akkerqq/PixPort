@@ -49,6 +49,7 @@ function postForm(url, filename, buf) {
   check('окно QR отдаёт 200', page.code === 200);
   check('галочка автозапуска в окне QR', page.body.includes('id="autoChk"') && page.body.includes('autostartSet'));
   check('автоподгон окна', page.body.includes('fitWin') && page.body.includes('__fitSoon'));
+  check('бейдж FREE/PRO + кнопка и модалка Pro', page.body.includes('id="planBadgeTop"') && page.body.includes('id="goProBtn"') && page.body.includes('id="proOverlay"') && page.body.includes('proPay'));
   const token = (page.body.match(/const token = '([^']+)'/) || [])[1];
   check('токен извлечён', !!token, token || 'нет');
 

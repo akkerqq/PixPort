@@ -30,6 +30,9 @@ const APP_VERSION = '0.1.9'; // видна в окне — по ней пров�
 // GitHub-репозиторий релизов: проверка обновлений тянет
 // https://api.github.com/repos/<repo>/releases/latest (тег vX.Y.Z + Setup-*.exe).
 const UPDATE_REPO = 'akkerqq/PixPort';
+// Оплата Pro: ссылку даст Platega/ЮKassa при подключении. Пока пусто —
+// кнопка «Купить» честно говорит «скоро», ключ уже вводится в настройках.
+const PRO_PAY_URL = '';
 const TOKEN_TTL = 30 * 60 * 1000; // 30 минут — жёсткий предел жизни QR
 
 /** Активные сессии: token -> { folder, created, received, closed } */
@@ -410,11 +413,22 @@ function qrPage(token, folder, net) {
     border:1px solid var(--line); background:var(--soft); color:var(--ink);
   }
   #menuBtn:disabled { opacity:.6; cursor:default; }
+  #planBadgeTop {
+    position:absolute; left:100%; bottom:-3px; margin-left:7px;
+    font-size:9px; font-weight:800; letter-spacing:1.5px; padding:2px 7px; border-radius:999px;
+  }
+  #planBadgeTop.free { background:var(--soft); color:var(--muted); border:1px solid var(--line); }
+  #planBadgeTop.pro { background:var(--brand); color:var(--brand-ink); }
+  #goProBtn {
+    font-size:14px; font-weight:800; padding:11px 22px; border-radius:14px; cursor:pointer;
+    border:0; background:var(--brand); color:var(--brand-ink); box-shadow:var(--shadow);
+  }
+  #goProBtn:active { transform:scale(.97); }
 </style>
 </head>
 <body>
   <div class="top">
-    <div class="logo">PixPort</div>
+    <div class="logo" style="position:relative">PixPort<span id="planBadgeTop" class="${isPro() ? 'pro' : 'free'}">${isPro() ? 'PRO' : 'FREE'}</span></div>
     <div style="display:flex;gap:8px">
       <button id="settingsBtn" style="display:none" onclick="openSettings()" title="Настройки">⚙</button>
       <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
@@ -436,6 +450,7 @@ function qrPage(token, folder, net) {
   ${netHint}
   <div class="hint">PixPort v${APP_VERSION}</div>
   </div>
+  <button id="goProBtn" onclick="openPro()" data-i="goPro"${isPro() ? ' style="display:none"' : ''}>Перейти на PRO →</button>
   <button class="helpLink" onclick="openHelp()" data-i="helpLink">Как пользоваться</button>
   <div class="overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
     <div class="sheet">
@@ -482,6 +497,20 @@ function qrPage(token, folder, net) {
       </ol>
       <div class="note" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).</div>
       <div class="closeRow"><button onclick="closeHelp()" data-i="btn_ok">Понятно</button></div>
+    </div>
+  </div>
+  <div class="overlay" id="proOverlay" onclick="if(event.target===this)closePro()">
+    <div class="sheet">
+      <h3 data-i="proTitle">PixPort Pro</h3>
+      <ol>
+        <li data-i-html="proB1"><b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.</li>
+        <li data-i-html="proB2"><b>Файлы и видео</b> до 512 МБ — как есть, без пережатия.</li>
+      </ol>
+      <div class="closeRow" style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="closePro()" data-i="btn_ok" style="background:var(--soft);color:var(--ink);border:1px solid var(--line)">Понятно</button>
+        <button onclick="proPay()" data-i="proPay">Купить Pro</button>
+      </div>
+      <div id="payMsg" style="font-size:13px;color:var(--muted);min-height:18px;margin-top:8px;text-align:right"></div>
     </div>
   </div>
 
@@ -552,6 +581,28 @@ function paintSub(pro) {
     row.style.display = 'none';
     btn.style.display = '';
   }
+  paintPlan(pro); // бейдж у логотипа + кнопка «Перейти на PRO»
+}
+// бейдж FREE/PRO у логотипа и видимость кнопки перехода (перерендера нет — правим руками)
+function paintPlan(pro) {
+  const badge = document.getElementById('planBadgeTop');
+  if (badge) { badge.textContent = pro ? 'PRO' : 'FREE'; badge.className = pro ? 'pro' : 'free'; }
+  const go = document.getElementById('goProBtn');
+  if (go) go.style.display = pro ? 'none' : '';
+}
+
+/* --- модалка Pro --- */
+const PAY_URL = '${PRO_PAY_URL}';
+function openPro() { document.getElementById('proOverlay').classList.add('open'); }
+function closePro() { document.getElementById('proOverlay').classList.remove('open'); }
+function proPay() {
+  if (!PAY_URL) {
+    const m = document.getElementById('payMsg');
+    m.textContent = t('proSoon');
+    return;
+  }
+  if (window.pixport && window.pixport.openUrl) window.pixport.openUrl(PAY_URL);
+  else location.href = PAY_URL;
 }
 async function subClick() {
   const msg = document.getElementById('subMsg');
@@ -565,6 +616,7 @@ async function subClick() {
     btn.textContent = t('subBtn');
     document.getElementById('subDesc').dataset.i = 'subDescFree';
     document.getElementById('subDesc').textContent = t('subDescFree');
+    paintPlan(false);
     return;
   }
   const key = document.getElementById('subKey').value.trim();
@@ -797,7 +849,13 @@ ru: {
   updLatest: 'У тебя последняя версия ({v})',
   updAvailable: 'Вышла {v} — жми «Скачать»',
   updFail: 'Не удалось проверить (нет сети?)',
-  updEmpty: 'Релизов пока нет — загляни позже',  netTitle: 'Подключение телефона',
+  updEmpty: 'Релизов пока нет — загляни позже',
+  goPro: 'Перейти на PRO →',
+  proTitle: 'PixPort Pro',
+  proB1: '<b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.',
+  proB2: '<b>Файлы и видео</b> до 512 МБ — как есть, без пережатия.',
+  proPay: 'Купить Pro',
+  proSoon: 'Продажи скоро откроются. А ключ уже можно ввести в ⚙ Настройках.',  netTitle: 'Подключение телефона',
   netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
   langTitle: 'Язык / Language',
   menuTitle: 'Пункт в меню проводника',
@@ -852,6 +910,12 @@ en: {
   updAvailable: '{v} is out — hit “Download”',
   updFail: 'Could not check (offline?)',
   updEmpty: 'No releases yet — check back later',
+  goPro: 'Get PRO →',
+  proTitle: 'PixPort Pro',
+  proB1: '<b>Original quality</b> photos — no 960 px cap, no extra compression.',
+  proB2: '<b>Files & video</b> up to 512 MB — as is, no recompression.',
+  proPay: 'Buy Pro',
+  proSoon: 'Sales opening soon. You can already enter a key in ⚙ Settings.',
   netTitle: 'Phone connection',
   netDesc: 'Multiple networks and the phone won\'t load? Pick another address, the QR regenerates.',
   langTitle: 'Язык / Language',
@@ -1203,12 +1267,15 @@ display:flex;flex-direction:column;align-items:center;justify-content:center;gap
 .top{width:100%;max-width:380px;display:flex;align-items:center;justify-content:space-between}
 .logo{font-size:12px;letter-spacing:4px;text-transform:uppercase;color:var(--brand);font-weight:800}
 #themeBtn{width:36px;height:36px;aspect-ratio:1/1;padding:0;flex:0 0 auto;border-radius:50%;border:1px solid var(--line);overflow:hidden;background:var(--card);font-size:16px;cursor:pointer;box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;line-height:1}
+#planBadgeTop{position:absolute;left:100%;bottom:-3px;margin-left:7px;font-size:9px;font-weight:800;letter-spacing:1.5px;padding:2px 7px;border-radius:999px}
+#planBadgeTop.free{background:var(--soft);color:var(--muted);border:1px solid var(--line)}
+#planBadgeTop.pro{background:var(--brand);color:var(--brand-ink)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:30px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;box-shadow:var(--shadow);max-width:380px}
 h2{font-size:20px;margin:0}p{color:var(--muted);font-size:14px;margin:0;max-width:340px;line-height:1.5}
 button{font-size:16px;font-weight:700;padding:14px 26px;border-radius:14px;border:0;
 background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{transform:scale(.97)}
 </style></head><body>
-<div class="top"><div class="logo">PixPort</div><button id="themeBtn" title="Тёмная / светлая тема">🌙</button></div>
+<div class="top"><div class="logo" style="position:relative">PixPort<span id="planBadgeTop" class="${isPro() ? 'pro' : 'free'}">${isPro() ? 'PRO' : 'FREE'}</span></div><button id="themeBtn" title="Тёмная / светлая тема">🌙</button></div>
 <div class="card">
 <h2 data-i="pickTitle">Выбери папку для фото</h2>
 <p data-i-html="pickDesc">Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
@@ -1320,6 +1387,8 @@ if (window.pixport) {
     subBtn.dataset.on = pro ? '1' : '';
     subBtn.dataset.i = pro ? 'subBtnOff' : 'subBtn'; // data-i, а не голый текст — иначе смена языка сотрёт состояние
     subBtn.textContent = t(subBtn.dataset.i);
+    const pb = document.getElementById('planBadgeTop'); // бейдж у логотипа
+    if (pb) { pb.textContent = pro ? 'PRO' : 'FREE'; pb.className = pro ? 'pro' : 'free'; }
   }
   subBtn.onclick = async () => {
     const pro = subBtn.dataset.on === '1';
@@ -1470,4 +1539,4 @@ async function start({ openBrowser = true } = {}) {
 // запуск из консоли: node server.js "C:\папка"
 if (require.main === module) start({ openBrowser: true });
 
-module.exports = { start, lanIp, lanIps, PORT, resolveFolder, APP_VERSION, UPDATE_REPO };
+module.exports = { start, lanIp, lanIps, PORT, resolveFolder, APP_VERSION, UPDATE_REPO, PRO_PAY_URL };

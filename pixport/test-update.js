@@ -91,6 +91,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     check('секция обновлений в окне выбора папки', pick.body.includes('id="updStatus"') && pick.body.includes('id="updDl"'));
     check('галочка автозапуска в окне выбора папки', pick.body.includes('id="autoChk"') && pick.body.includes('autostartSet'));
     check('автоподгон в окне выбора папки', pick.body.includes('fitWin'));
+    check('бейдж FREE/PRO в окне выбора папки', pick.body.includes('id="planBadgeTop"'));
   } finally {
     srv.kill();
     stub.close();
