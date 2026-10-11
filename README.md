@@ -4,6 +4,8 @@
 
 Фото с телефона — сразу в нужную папку на ПК. Без проводов, мессенджеров и облаков.
 
+**Без интернета:** всё работает внутри домашней сети — достаточно одного Wi-Fi (подойдёт даже роутер без провайдера). Наружу приложение ходит только за проверкой обновлений.
+
 **Как это работает:**
 1. Выбери папку — кнопкой, перетаскиванием в окно, правым кликом в проводнике или хоткеем **Ctrl+Alt+Q** в открытой папке.
 2. Наведи камеру телефона на QR-код.
@@ -49,4 +51,4 @@ npm run dist             # сборка инсталлера (требует Inn
 
 ---
 
-*EN: PixPort drops photos from your phone straight into a PC folder over local Wi-Fi — scan the QR, shoot, done. Free tier caps at 960 px compressed, Pro key unlocks originals. Windows download under Releases.*
+*EN: PixPort drops photos from your phone straight into a PC folder over local Wi-Fi — scan the QR, shoot, done. No internet needed (same Wi-Fi is enough). Free tier caps at 960 px compressed, Pro key unlocks originals. Windows download under Releases.*
