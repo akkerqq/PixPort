@@ -354,10 +354,14 @@ function qrPage(token, folder, net) {
   }
   /* инверсия при наведении: кнопка темнее, текст светлее, текстура светлее */
   .actions button:hover { background:#23263f; border-color:#23263f; color:#fff; transform:scale(1.05); }
-  [data-theme="dark"] .actions button:hover { background:#000; border-color:#000; color:#fff; }
+  /* зеркально в тёмной теме: кнопка светлеет, текст и текстура темнеют */
+  [data-theme="dark"] .actions button:hover { background:#e8ebfb; border-color:#e8ebfb; color:#181b2e; }
   #newQrBtn:hover { --tex:url(/assets/qrtex-light.png); }
   #openBtn:hover { --tex:url(/assets/folder-light.png); }
   #pickBtn:hover { --tex:url(/assets/swap-light.png); }
+  [data-theme="dark"] #newQrBtn:hover { --tex:url(/assets/qrtex-dark.png); }
+  [data-theme="dark"] #openBtn:hover { --tex:url(/assets/folder-dark.png); }
+  [data-theme="dark"] #pickBtn:hover { --tex:url(/assets/swap-dark.png); }
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
   /* текстура каждой кнопки — своя переменная */
