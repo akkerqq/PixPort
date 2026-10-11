@@ -524,7 +524,7 @@ function qrPage(token, folder, net) {
         <li data-i-html="help2"><b>Наведи камеру телефона</b> на QR-код.</li>
         <li data-i-html="help3"><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
       </ol>
-      <div class="note" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).</div>
+      <div class="note" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi (нет роутера — раздай точку доступа с телефона, тоже сработает). QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).</div>
       <div class="closeRow"><button onclick="closeHelp()" data-i="btn_ok">Понятно</button></div>
     </div>
   </div>
@@ -874,7 +874,7 @@ ru: {
   help1: '<b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.',
   help2: '<b>Наведи камеру телефона</b> на QR-код.',
   help3: '<b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.',
-  helpNote: 'Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).',
+  helpNote: 'Телефон и компьютер должны быть в одном Wi-Fi (нет роутера — раздай точку доступа с телефона, тоже сработает). QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).',
   btn_ok: 'Понятно', setTitle: '⚙ Настройки',
   subTitle: 'Подписка PixPort',
   subDescFree: 'Бесплатно: фото до 960 px со сжатием. С ключом Pro — оригинальное качество без ограничений.',
@@ -934,7 +934,7 @@ en: {
   help1: '<b>Pick a folder</b> — with the button, by dragging into the window, right-clicking it in Explorer, or <b>Ctrl+Alt+Q</b> inside it.',
   help2: '<b>Point your phone camera</b> at the QR code.',
   help3: '<b>Take a photo</b> or pick from gallery — it lands straight in the PC folder.',
-  helpNote: 'Phone and PC must be on the same Wi-Fi. QR lives 30 minutes. Closing the window minimizes to tray — the hotkey keeps working. Phone won\'t open the page? Allow PixPort through the Windows firewall (port 8765).',
+  helpNote: 'Phone and PC must be on the same Wi-Fi (no router around — tether from your phone, that works too). QR lives 30 minutes. Closing the window minimizes to tray — the hotkey keeps working. Phone won\'t open the page? Allow PixPort through the Windows firewall (port 8765).',
   btn_ok: 'Got it', setTitle: '⚙ Settings',
   subTitle: 'PixPort subscription',
   subDescFree: 'Free: photos up to 960 px, compressed. With a Pro key — original quality, no limits.',
@@ -1365,7 +1365,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <li data-i-html="help2"><b>Наведи камеру телефона</b> на QR-код.</li>
 <li data-i-html="help3"><b>Сними фото</b> или выбери из галереи — оно сразу окажется в папке на компьютере.</li>
 </ol>
-<div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:8px" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).</div>
+<div style="font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:8px" data-i="helpNote">Телефон и компьютер должны быть в одном Wi-Fi (нет роутера — раздай точку доступа с телефона, тоже сработает). QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).</div>
 <div style="text-align:right;margin-top:14px"><button id="helpOk" style="font-size:14px" data-i="btn_ok">Понятно</button></div>
 </div>
 </div>
