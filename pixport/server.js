@@ -341,22 +341,25 @@ function qrPage(token, folder, net) {
   .actions button {
     font-size:13.5px; font-weight:600; padding:9px 15px; border-radius:12px; cursor:pointer;
     border:1px solid var(--line); background:var(--soft); color:var(--ink);
-    transition:transform .08s, filter .15s;
+    transition:transform .15s ease, filter .15s;
     position:relative; overflow:hidden;
   }
-  .actions button:hover { filter:brightness(.97); }
+  .actions button:hover { filter:brightness(.97); transform:scale(1.05); }
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
-  /* при наведении на кнопке проступает крупный QR и едет за курсором */
+  /* текстура каждой кнопки — своя переменная: другие текстуры вешать сюда же */
+  #newQrBtn, #openBtn, #pickBtn { --tex:url(/assets/qrtex-dark.png); }
+  [data-theme="dark"] #newQrBtn, [data-theme="dark"] #openBtn, [data-theme="dark"] #pickBtn { --tex:url(/assets/qrtex-light.png); }
+  /* при наведении текстура проступает и едет за курсором */
   .actions button::after {
     content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
-    background:url(/assets/qrtex-dark.png) no-repeat;
+    background-image:var(--tex);
+    background-repeat:no-repeat;
     background-size:200px 200px;
     background-position:var(--qx, 50%) var(--qy, 50%);
     opacity:0; transition:opacity .25s ease, background-position .35s ease-out;
   }
   .actions button:hover::after { opacity:.16; }
-  [data-theme="dark"] .actions button::after { background-image:url(/assets/qrtex-light.png); }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
   .ipRow { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   .ipRow button {
@@ -414,10 +417,10 @@ function qrPage(token, folder, net) {
   <div id="qr"><img id="qrimg" alt="QR"></div>
   <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
   <div class="actions">
-    <button onclick="newQr()" data-i="btn_new" style="font-size:15.5px;padding:11px 24px">Новый QR</button>
+    <button id="newQrBtn" onclick="newQr()" data-i="btn_new" style="font-size:15.5px;padding:11px 24px">Новый QR</button>
   </div>
   <div class="actions" style="margin-top:0">
-    <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
+    <button id="openBtn" onclick="openFolder()" data-i="btn_open">Открыть папку</button>
     <button id="pickBtn" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
   </div>
   <div class="hint" data-i="hint_scan">Сканируй камерой телефона · код живёт 30 минут</div>
