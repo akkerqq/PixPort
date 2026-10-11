@@ -19,5 +19,7 @@ contextBridge.exposeInMainWorld('pixport', {
   /** Автозапуск Windows. */
   autostartStatus: () => ipcRenderer.invoke('autostart-status'),
   autostartSet: on => ipcRenderer.invoke('autostart-set', on),
+  /** Подогнать высоту окна под контент (main.js упирает в экран). */
+  fitWindow: h => ipcRenderer.invoke('fit-window', h),
   isDesktop: true,
 });

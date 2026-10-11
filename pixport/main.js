@@ -5,7 +5,7 @@
  * перетаскиванием папки в окно или контекстное меню проводника.
  */
 
-const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut, Tray, Menu, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, globalShortcut, Tray, Menu, Notification, nativeImage, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -121,8 +121,10 @@ function createWindow() {
   // что реально происходит с загрузкой страницы
   win.webContents.on('did-fail-load', (e, code, desc, url) =>
     diag('FAIL LOAD', code, desc, url));
-  win.webContents.on('did-finish-load', () =>
-    diag('OK LOAD', win.webContents.getURL()));
+  win.webContents.on('did-finish-load', () => {
+    diag('OK LOAD', win.webContents.getURL());
+    win.__fitted = false; // новая страница — центрируем заново
+  });
   win.webContents.on('console-message', (e, lvl, msg) =>
     diag('CONSOLE', lvl, msg));
   process.on('uncaughtException', e => diag('UNCAUGHT', e.stack || e.message));
@@ -243,6 +245,20 @@ ipcMain.handle('menu-remove', () => { try { return menu.uninstall(); } catch (e)
 ipcMain.handle('open-url', (e, url) => {
   const u = String(url || '');
   if (u.startsWith(`https://github.com/${UPDATE_REPO}/releases`)) shell.openExternal(u);
+});
+
+/* --- автоподгон окна под контент (чтобы не было скролла) --- */
+
+// страница замеряет высоту контента и просит точный размер;
+// упираемся в рабочую область экрана, центрируем один раз за страницу
+ipcMain.handle('fit-window', (e, h) => {
+  if (!win || win.isDestroyed()) return;
+  const want = Math.ceil(Number(h) || 0);
+  if (want < 200) return;
+  const maxH = screen.getPrimaryDisplay().workArea.height - 60;
+  const [w] = win.getContentSize();
+  win.setContentSize(w, Math.min(want, maxH), true);
+  if (!win.__fitted) { win.__fitted = true; win.center(); }
 });
 
 /* --- автозапуск Windows (галочка в настройках) --- */

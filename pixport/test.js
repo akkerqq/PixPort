@@ -48,6 +48,7 @@ function postForm(url, filename, buf) {
   const page = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
   check('окно QR отдаёт 200', page.code === 200);
   check('галочка автозапуска в окне QR', page.body.includes('id="autoChk"') && page.body.includes('autostartSet'));
+  check('автоподгон окна', page.body.includes('fitWin') && page.body.includes('__fitSoon'));
   const token = (page.body.match(/const token = '([^']+)'/) || [])[1];
   check('токен извлечён', !!token, token || 'нет');
 

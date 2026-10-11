@@ -371,6 +371,7 @@ function qrPage(token, folder, net) {
     background:var(--card); color:var(--ink); border:1px solid var(--line);
     border-radius:20px; box-shadow:var(--shadow); max-width:400px; width:100%;
     padding:24px 22px; text-align:left;
+    max-height:calc(100vh - 48px); overflow:auto; /* на крошечных экранах скроллится шторка, а не страница */
   }
   .sheet h3 { font-size:17px; margin-bottom:12px; }
   .sheet ol { margin:0 0 6px 20px; font-size:14px; line-height:1.65; color:var(--ink); }
@@ -717,6 +718,9 @@ function loadIps() {
     .catch(() => {});
 }
 loadQr(null);
+window.__fitSoon = () => setTimeout(fitWin, 50);
+fitWin(); // окно ровно под контент, без скролла
+setTimeout(fitWin, 1200); // добор после устаканивания шрифтов
 </script>
 </body>
 </html>`;
@@ -869,6 +873,21 @@ function applyLang(lang) {
 function setLang(lang) {
   try { localStorage.setItem('pixport-lang', lang); } catch (e) {}
   applyLang(lang);
+  try { if (window.__fitSoon) window.__fitSoon(); } catch (e) {} // тексты другой длины — перепроверить высоту
+}
+/* Замер высоты контента без мигания: minima на vh врут при замере,
+   поэтому на один синхронный reflow их снимаем (перерисовки между нет). */
+function measureContentH() {
+  const de = document.documentElement, b = document.body;
+  const s1 = de.style.minHeight, s2 = b.style.minHeight;
+  de.style.minHeight = '0'; b.style.minHeight = '0';
+  const h = Math.max(de.scrollHeight, b.scrollHeight);
+  de.style.minHeight = s1; b.style.minHeight = s2;
+  return h;
+}
+function fitWin() {
+  if (!window.pixport || !window.pixport.fitWindow) return;
+  window.pixport.fitWindow(Math.ceil(measureContentH()) + 12);
 }
 function toggleLang() { setLang(__LANG === 'ru' ? 'en' : 'ru'); }
 `;
@@ -1124,7 +1143,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button id="sbtn" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="btn_settings">⚙ Настройки</button>
 </div>
 <div id="setOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
-<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left">
+<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left;max-height:calc(100vh - 48px);overflow:auto">
 <div style="font-size:17px;font-weight:800;margin-bottom:12px" data-i="setTitle">⚙ Настройки</div>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="langTitle">Язык / Language</div>
 <div style="margin-bottom:14px">
@@ -1158,7 +1177,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 </div>
 <button id="helpLink" style="background:none;border:0;color:var(--muted);font-size:12.5px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:4px 8px" data-i="helpLink">Как пользоваться</button>
 <div id="helpOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
-<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left">
+<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left;max-height:calc(100vh - 48px);overflow:auto">
 <div style="font-size:17px;font-weight:800;margin-bottom:12px" data-i="helpTitle">Как пользоваться PixPort</div>
 <ol style="margin:0 0 6px 20px;font-size:14px;line-height:1.65">
 <li data-i-html="help1"><b>Выбери папку</b> — кнопкой, перетаскиванием в окно, правым кликом в проводнике или <b>Ctrl+Alt+Q</b> в открытой папке.</li>
@@ -1290,6 +1309,10 @@ if (window.pixport) {
   };
 
   sync();
+
+  window.__fitSoon = () => setTimeout(fitWin, 50);
+  fitWin(); // окно ровно под контент, без скролла
+  setTimeout(fitWin, 1200); // добор после устаканивания шрифтов
 
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', async e => {
