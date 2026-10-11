@@ -407,7 +407,7 @@ function qrPage(token, folder, net) {
   </div>
   <div class="actions">
     <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
-    <button id="pickBtn" style="display:none" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
+    <button id="pickBtn" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
   </div>
   <div class="hint" data-i="hint_scan">Сканируй камерой телефона · код живёт 30 минут</div>
   ${netHint}
@@ -485,7 +485,6 @@ let dead = false;
 const desktop = !!window.pixport;
 
 if (desktop) {
-  document.getElementById('pickBtn').style.display = '';
   document.getElementById('settingsBtn').style.display = '';
 }
 
@@ -656,6 +655,8 @@ function openFolder() {
   else fetch('/api/open?t=' + token);
 }
 async function pickFolder() {
+  // в браузере нативного диалога нет — ведём на страницу выбора папки
+  if (!window.pixport) { location.href = '/'; return; }
   const p = await window.pixport.pickFolder();
   if (p) location.href = '/?folder=' + encodeURIComponent(p);
 }
