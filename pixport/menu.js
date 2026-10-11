@@ -33,39 +33,47 @@ function runPs(script) {
 
 /**
  * Команда для реестра.
- * packed: "C:\...\PixPort.exe" "%V"
- * dev:    "C:\...\electron.exe" "C:\...\pixport" "%V"
+ * По документации: глагол ПО папке (Directory) получает путь через %1,
+ * глагол по ФОНУ (Background) — через %V. Общий "%V" везде — неверно:
+ * в Directory-контексте он может не раскрыться (кейс Аккера 11.10.2026:
+ * клик по папке при запущенном приложении → диалог «нет приложения»).
+ * packed: "C:\...\PixPort.exe" "%1"  /  dev: "C:\...\electron.exe" "C:\...\pixport" "%1"
  */
-function commandFor({ exe, appDir }) {
-  return appDir ? `"${exe}" "${appDir}" "%V"` : `"${exe}" "%V"`;
+function commandFor({ exe, appDir }, place) {
+  const tail = place === 'background' ? '"%V"' : '"%1"';
+  return appDir ? `"${exe}" "${appDir}" ${tail}` : `"${exe}" ${tail}`;
 }
 
 /** Поставить пункт. Возвращает { ok, command }. */
 function install(opts) {
-  const cmd = commandFor(opts);
+  const cmdDir = commandFor(opts, 'directory'); // клик ПО папке → %1
+  const cmdBg = commandFor(opts, 'background'); // клик по ФОНУ → %V
   const exe = String(opts.exe).replace(/'/g, "''");
 
   runPs(`
-$cmd = @'
-${cmd}
+$cmdDir = @'
+${cmdDir}
+'@.Trim()
+$cmdBg = @'
+${cmdBg}
 '@.Trim()
 
 $icon = '${exe}'
 
 foreach ($t in @(
-  @{ Key = '${KEYS[0]}'; Text = 'Показать QR (PixPort)' },
-  @{ Key = '${KEYS[1]}'; Text = 'Показать QR здесь (PixPort)' }
+  @{ Key = '${KEYS[0]}'; Text = 'Показать QR (PixPort)'; Cmd = $cmdDir },
+  @{ Key = '${KEYS[1]}'; Text = 'Показать QR здесь (PixPort)'; Cmd = $cmdBg }
 )) {
   New-Item -Path $t.Key -Force | Out-Null
   Set-ItemProperty -Path $t.Key -Name '(default)' -Value $t.Text
   Set-ItemProperty -Path $t.Key -Name 'Icon'      -Value $icon
   New-Item -Path ($t.Key + '\\command') -Force | Out-Null
-  Set-ItemProperty -Path ($t.Key + '\\command') -Name '(default)' -Value $cmd
+  Set-ItemProperty -Path ($t.Key + '\\command') -Name '(default)' -Value $t.Cmd
 }
 'installed'
 `);
 
-  return { ok: isInstalled(), command: cmd };
+  return { ok: isInstalled(), command: cmdDir };
 }
 
 /** Убрать пункт. */

@@ -23,10 +23,12 @@ check('команда без appDir', !r.command.includes('resources'), r.comman
 const out = execFileSync('reg', ['query', 'HKCU\\Software\\Classes\\Directory\\shell\\PixPort\\command'], { encoding: 'utf8' });
 check('в реестре PixPort.exe', out.includes('PixPort.exe'));
 check('в реестре нет electron', !out.includes('electron.exe'));
+check('клик по папке — через %1', out.includes('"%1"'), out.trim());
 
 // второй пункт (фон папки) тоже есть
 const out2 = execFileSync('reg', ['query', 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\PixPort\\command'], { encoding: 'utf8' });
 check('фон папки тоже установлен', out2.includes('PixPort.exe'));
+check('клик по фону — через %V', out2.includes('"%V"'), out2.trim());
 
 // снятие
 const u = menu.uninstall();
@@ -37,7 +39,8 @@ const devElectron = path.join(__dirname, 'node_modules', 'electron', 'dist', 'el
 if (fs.existsSync(devElectron)) {
   const rd = menu.install({ exe: devElectron, appDir: __dirname });
   check('dev-установка ok', rd.ok === true);
-  check('dev-команда с appDir', rd.command.includes('electron.exe') && rd.command.includes('"%V"'), rd.command);
+  check('dev-команда по папке: electron + appDir + %1', rd.command.includes('electron.exe') && rd.command.includes('"%1"'), rd.command);
+  check('dev-команда по фону: %V', menu.commandFor({ exe: devElectron, appDir: __dirname }, 'background').includes('"%V"'));
   menu.uninstall();
 }
 

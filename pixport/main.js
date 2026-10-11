@@ -134,6 +134,7 @@ function createWindow() {
 // --- однокомандная блокировка: второй запуск открывает папку в первом окне
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
+  diag('2nd-instance argv =', JSON.stringify(process.argv));
   app.quit();
 } else {
   app.on('second-instance', (ev, argv) => {
