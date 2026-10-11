@@ -25,7 +25,7 @@ const { licenseState, activateKey, clearLicense, isPro } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
-const APP_VERSION = '0.1.3'; // видна в окне — по ней проверяем, та ли сборка
+const APP_VERSION = '0.1.4'; // видна в окне — по ней проверяем, та ли сборка
 const TOKEN_TTL = 30 * 60 * 1000; // 30 минут — жёсткий предел жизни QR
 
 /** Активные сессии: token -> { folder, created, received, closed } */
@@ -892,6 +892,14 @@ async function handleRequest(req, res) {
   const s = q ? sessions.get(q) : null;
 
   /* --- только с localhost: управление --- */
+  if (url.pathname === '/favicon.ico' && req.method === 'GET') {
+    // эмблема во вкладках браузера (и на телефоне тоже) — токен не нужен
+    try {
+      const ico = fs.readFileSync(path.join(__dirname, 'assets', 'icon.ico'));
+      res.writeHead(200, { 'Content-Type': 'image/x-icon', 'Cache-Control': 'public, max-age=86400' });
+      return res.end(ico);
+    } catch (e) { return json(res, 404, { ok: false }); }
+  }
   if (isLoopback(req)) {
     if (url.pathname === '/api/new' && req.method === 'GET') {
       // перегенерация QR: токен старый убиваем, папку сохраняем
