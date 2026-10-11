@@ -98,6 +98,20 @@ function uniqueName(folder, ext) {
   return base + ext;
 }
 
+/**
+ * Переместить файл в папку. rename — мгновенно, но не умеет между дисками
+ * (TEMP на C:, а папка на D: — EXDEV). Тогда копируем и удаляем исходник.
+ */
+function moveFile(tmp, dest) {
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (e) {
+    if (e.code !== 'EXDEV') throw e;
+    fs.copyFileSync(tmp, dest);
+    fs.rmSync(tmp, { force: true });
+  }
+}
+
 /** Создать одноразовую сессию для папки. */
 function createSession(folder) {
   const token = crypto.randomBytes(12).toString('base64url');
@@ -519,7 +533,7 @@ function qrPage(token, folder, net) {
       <h3 data-i="proTitle">PixPort Pro</h3>
       <ol>
         <li data-i-html="proB1"><b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.</li>
-        <li data-i-html="proB2"><b>Файлы и видео</b> до 512 МБ — как есть, без пережатия.</li>
+        <li data-i-html="proB2"><b>Файлы и видео</b> до 2 ГБ — как есть, без пережатия.</li>
       </ol>
       <div style="margin-top:14px">
         <button id="proPayBtn" onclick="proPay()" data-i="proPay">Купить Pro</button>
@@ -880,7 +894,7 @@ ru: {
   goPro: 'Перейти на PRO',
   proTitle: 'PixPort Pro',
   proB1: '<b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.',
-  proB2: '<b>Файлы и видео</b> до 512 МБ — как есть, без пережатия.',
+  proB2: '<b>Файлы и видео</b> до 2 ГБ — как есть, без пережатия.',
   proPay: 'Купить Pro',
   proSoon: 'Продажи скоро откроются. А ключ уже можно ввести в ⚙ Настройках.',  netTitle: 'Подключение телефона',
   netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
@@ -940,7 +954,7 @@ en: {
   goPro: 'Get PRO',
   proTitle: 'PixPort Pro',
   proB1: '<b>Original quality</b> photos — no 960 px cap, no extra compression.',
-  proB2: '<b>Files & video</b> up to 512 MB — as is, no recompression.',
+  proB2: '<b>Files & video</b> up to 2 GB — as is, no recompression.',
   proPay: 'Buy Pro',
   proSoon: 'Sales opening soon. You can already enter a key in ⚙ Settings.',
   netTitle: 'Phone connection',
@@ -1050,10 +1064,10 @@ async function handleUpload(req, res, token) {
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) return json(res, 400, { ok: false, error: 'Нет файла' });
 
-  // Лимиты: free — фото до 60 МБ, Pro — файлы/видео до 512 МБ.
+  // Лимиты: free — фото до 60 МБ, Pro — файлы/видео до 2 ГБ.
   // Пишем потоком во временный файл — большие видео не висят в памяти.
   const pro = isPro();
-  const maxSize = pro ? 512 * 1024 * 1024 : 60 * 1024 * 1024;
+  const maxSize = pro ? 2 * 1024 * 1024 * 1024 : 60 * 1024 * 1024;
   const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: maxSize } });
   let saved = null;
   let failed = null;
@@ -1062,7 +1076,7 @@ async function handleUpload(req, res, token) {
   bb.on('file', (name, stream, info) => {
     const tmp = path.join(os.tmpdir(), `pixport-${Date.now()}-${Math.random().toString(16).slice(2)}.part`);
     const out = fs.createWriteStream(tmp);
-    stream.on('limit', () => { failed = pro ? 'Файл больше 512 МБ' : 'Файл больше 60 МБ'; });
+    stream.on('limit', () => { failed = pro ? 'Файл больше 2 ГБ' : 'Файл больше 60 МБ'; });
     stream.pipe(out);
     pending = new Promise(resolve => out.on('finish', async () => {
       const done = () => { try { fs.rmSync(tmp, { force: true }); } catch (e) {} resolve(); };
@@ -1073,7 +1087,7 @@ async function handleUpload(req, res, token) {
         if (pro && !isImageExt(ext)) {
           // Pro и не картинка (видео, документ) — кладём как есть, без пережатия
           const fname = uniqueName(s.folder, ext || '.bin');
-          fs.renameSync(tmp, path.join(s.folder, fname));
+          moveFile(tmp, path.join(s.folder, fname));
           saved = fname;
           s.received++;
           s.files.push(fname);
@@ -1101,7 +1115,7 @@ async function handleUpload(req, res, token) {
         if (pro) {
           try {
             const fname = uniqueName(s.folder, ext || '.bin');
-            fs.renameSync(tmp, path.join(s.folder, fname));
+            moveFile(tmp, path.join(s.folder, fname));
             saved = fname;
             s.received++;
             s.files.push(fname);

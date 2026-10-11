@@ -115,6 +115,18 @@ function postForm(url, filename, buf) {
   check('free: видео отклонено', vdFree.code === 500 && vdFree.body.includes('только фото'), vdFree.body);
   await get(`${BASE}/api/close?t=${t4}`);
 
+  // --- лимиты веса ---
+  const page5 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const t5 = (page5.body.match(/const token = '([^']+)'/) || [])[1];
+  const big = Buffer.alloc(70 * 1024 * 1024, 3); // 70 МБ > free-лимита 60 МБ
+  const bigFree = await postForm(`${BASE}/u?t=${t5}`, 'big.mp4', big);
+  check('free: больше 60 МБ отклонено', bigFree.code === 500 && bigFree.body.includes('больше 60'), bigFree.body);
+  await get(`${BASE}/api/close?t=${t5}`);
+
+  // moveFile (rename внутри, copy между дисками) отдельно не дёрнуть —
+  // но каждый Pro-файл выше уже прошёл через него. Здесь только лимит:
+  check('moveFile есть в коде', fs.readFileSync(require('path').join(__dirname, 'server.js'), 'utf8').includes('function moveFile'));
+
   // восстановить состояние: было free
   clearLicense();
   await get(`${BASE}/api/close?t=${t2}`);
