@@ -422,8 +422,11 @@ function qrPage(token, folder, net) {
   #goProBtn {
     font-size:14px; font-weight:800; padding:11px 22px; border-radius:14px; cursor:pointer;
     border:0; background:var(--brand); color:var(--brand-ink); box-shadow:var(--shadow);
+    transition:transform .15s ease, background-color .25s ease, color .25s ease, box-shadow .25s ease;
   }
-  #goProBtn:active { transform:scale(.97); }
+  /* при наведении: растёт сильнее обычных кнопок, золотится, текст — просто PRO */
+  #goProBtn:hover { transform:scale(1.08); background-color:#ffb700; color:#2a1e00; box-shadow:0 6px 24px rgba(255,183,0,.45); }
+  #goProBtn:active { transform:scale(.96); }
 </style>
 </head>
 <body>
@@ -450,7 +453,7 @@ function qrPage(token, folder, net) {
   ${netHint}
   <div class="hint">PixPort v${APP_VERSION}</div>
   </div>
-  <button id="goProBtn" onclick="openPro()" data-i="goPro"${isPro() ? ' style="display:none"' : ''}>Перейти на PRO →</button>
+  <button id="goProBtn" onclick="openPro()" data-i="goPro"${isPro() ? ' style="display:none"' : ''}>Перейти на PRO</button>
   <button class="helpLink" onclick="openHelp()" data-i="helpLink">Как пользоваться</button>
   <div class="overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
     <div class="sheet">
@@ -798,6 +801,12 @@ loadQr(null);
 window.__fitSoon = () => setTimeout(fitWin, 50);
 fitWin(); // окно ровно под контент, без скролла
 setTimeout(fitWin, 1200); // добор после устаканивания шрифтов
+// кнопка PRO: при наведении текст меняется на короткое «PRO» (смена языка вернёт полный — applyLang)
+const goBtn = document.getElementById('goProBtn');
+if (goBtn) {
+  goBtn.addEventListener('mouseenter', () => { goBtn.textContent = 'PRO'; });
+  goBtn.addEventListener('mouseleave', () => { goBtn.textContent = t('goPro'); });
+}
 // QR-текстура на кнопках едет за курсором (позиция — в CSS-переменных,
 // transition на background-position даёт плавное отставание)
 document.querySelectorAll('.actions button').forEach(b => {
@@ -850,7 +859,7 @@ ru: {
   updAvailable: 'Вышла {v} — жми «Скачать»',
   updFail: 'Не удалось проверить (нет сети?)',
   updEmpty: 'Релизов пока нет — загляни позже',
-  goPro: 'Перейти на PRO →',
+  goPro: 'Перейти на PRO',
   proTitle: 'PixPort Pro',
   proB1: '<b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.',
   proB2: '<b>Файлы и видео</b> до 512 МБ — как есть, без пережатия.',
@@ -910,7 +919,7 @@ en: {
   updAvailable: '{v} is out — hit “Download”',
   updFail: 'Could not check (offline?)',
   updEmpty: 'No releases yet — check back later',
-  goPro: 'Get PRO →',
+  goPro: 'Get PRO',
   proTitle: 'PixPort Pro',
   proB1: '<b>Original quality</b> photos — no 960 px cap, no extra compression.',
   proB2: '<b>Files & video</b> up to 512 MB — as is, no recompression.',
