@@ -352,10 +352,10 @@ function qrPage(token, folder, net) {
     transition:transform .15s ease, background-color .25s ease, color .25s ease, border-color .25s ease;
     position:relative; overflow:hidden;
   }
-  /* инверсия при наведении: кнопка темнее, текст светлее, текстура светлее */
-  .actions button:hover { background:#23263f; border-color:#23263f; color:#fff; transform:scale(1.05); }
-  /* зеркально в тёмной теме: кнопка светлеет, текст и текстура темнеют */
-  [data-theme="dark"] .actions button:hover { background:#e8ebfb; border-color:#e8ebfb; color:#181b2e; }
+  /* инверсия при наведении: приглушённая (был вырвиглаз — смягчили) */
+  .actions button:hover { background:#4c539e; border-color:#4c539e; color:#fff; transform:scale(1.05); }
+  /* зеркально в тёмной теме */
+  [data-theme="dark"] .actions button:hover { background:#c9cede; border-color:#c9cede; color:#181b2e; }
   #newQrBtn:hover { --tex:url(/assets/qrtex-light.png); }
   #openBtn:hover { --tex:url(/assets/folder-light.png); }
   #pickBtn:hover { --tex:url(/assets/swap-light.png); }
@@ -380,7 +380,7 @@ function qrPage(token, folder, net) {
     background-position:var(--qx, 50%) var(--qy, 50%);
     opacity:0; transition:opacity .25s ease, background-position .35s ease-out;
   }
-  .actions button:hover::after { opacity:.22; }
+  .actions button:hover::after { opacity:.18; }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
   .ipRow { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   .ipRow button {
