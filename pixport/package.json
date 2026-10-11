@@ -1,6 +1,6 @@
 {
   "name": "pixport",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "PixPort — фото с телефона сразу в нужную папку на ПК. Скан QR — и готово.",
   "main": "main.js",
   "scripts": {
