@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PixPort — фото с телефона сразу в папку на ПК</title>
+<meta name="description" content="PixPort: наведи камеру на QR-код — фото с телефона сразу окажется в папке на компьютере. Без проводов, мессенджеров и облаков.">
+<style>
+:root{--bg:#fff;--fg:#111;--muted:#555;--line:#e5e5e5;--accent:#b8860b;--card:#fafafa}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--fg);line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg)}
+nav{display:flex;gap:18px;align-items:center;justify-content:space-between;padding:12px 0}
+nav .logo{font-weight:700;font-size:20px;text-decoration:none;color:var(--fg)}
+nav .links a{color:var(--muted);text-decoration:none;margin-left:16px;font-size:15px}
+nav .links a:hover{color:var(--fg)}
+.hero{padding:56px 0 36px;text-align:center}
+.hero h1{font-size:34px;margin:0 0 12px;line-height:1.25}
+.hero p{color:var(--muted);font-size:18px;margin:0 0 24px}
+.btn{display:inline-block;padding:12px 28px;border-radius:10px;text-decoration:none;font-size:17px;margin:4px 6px}
+.btn.primary{background:#111;color:#fff}
+.btn.gold{background:var(--accent);color:#fff}
+.btn.ghost{border:1px solid var(--line);color:var(--fg)}
+section{padding:28px 0}
+h2{font-size:24px;margin:0 0 14px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.step b{display:block;font-size:18px;margin-bottom:6px}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{border:1px solid var(--line);padding:10px 12px;text-align:left;font-size:15px}
+th{background:var(--card)}
+.price{font-size:22px;font-weight:700}
+.note{color:var(--muted);font-size:14px}
+footer{border-top:1px solid var(--line);margin-top:20px;padding:18px 0 30px;color:var(--muted);font-size:14px}
+footer a{color:var(--muted);margin-right:16px}
+.offline{background:#f4f9f4;border:1px solid #cfe3cf;border-radius:12px;padding:14px 18px}
+</style>
+</head>
+<body>
+<header><div class="wrap"><nav>
+<a class="logo" href="./">📷 PixPort</a>
+<span class="links"><a href="#how">Как это работает</a><a href="#pricing">Тарифы</a><a href="#download">Скачать</a><a href="#support">Поддержка</a></span>
+</nav></div></header>
+
+<main class="wrap">
+<div class="hero">
+<h1>Фото с телефона — сразу в нужную папку на ПК</h1>
+<p>Наведи камеру на QR-код, сними фото — оно уже на компьютере.<br>Без проводов, мессенджеров и облаков.</p>
+<a class="btn primary" href="#download">Скачать для Windows</a>
+<a class="btn gold" href="#pricing">Pro — 690 ₽ навсегда</a>
+</div>
+
+<section id="how">
+<h2>Как это работает</h2>
+<div class="steps">
+<div class="step"><b>1. Выбери папку</b>Кнопкой, перетаскиванием в окно, правым кликом в проводнике или хоткеем Ctrl+Alt+Q.</div>
+<div class="step"><b>2. Покажи QR</b>На экране компьютера появится QR-код — наведи на него камеру телефона.</div>
+<div class="step"><b>3. Снимай</b>Фото или видео с телефона сразу оказывается в папке на компьютере.</div>
+</div>
+<p style="margin-top:14px"></p>
+<div class="offline"><b>Работает без интернета.</b> Достаточно, чтобы телефон и компьютер были в одном Wi-Fi — подойдёт даже роутер без провайдера или точка доступа с телефона.</div>
+</section>
+
+<section id="pricing">
+<h2>Тарифы</h2>
+<table>
+<tr><th></th><th>Free</th><th>Pro</th></tr>
+<tr><td>Качество фото</td><td>до 960 px со сжатием</td><td><b>оригинал без ограничений</b></td></tr>
+<tr><td>Файлы и видео</td><td>только фото</td><td><b>что угодно, до 2 ГБ, как есть</b></td></tr>
+<tr><td>Цена</td><td class="price">0 ₽</td><td class="price">690 ₽ <span class="note">разовый платёж, навсегда</span></td></tr>
+</table>
+<p>Оплата онлайн по ссылке (СБП, картой — через платёжного оператора). После оплаты ключ Pro направляется покупателю и вводится в программе: ⚙ Настройки → Подписка.</p>
+<p class="note">Возврат — в течение 14 дней с момента оплаты по обращению в поддержку. Подробнее: <a href="terms.html">Пользовательское соглашение</a>.</p>
+</section>
+
+<section id="download">
+<h2>Скачать</h2>
+<p>Windows 10/11: <a class="btn ghost" href="https://github.com/akkerqq/PixPort/releases/latest">Последний релиз на GitHub</a></p>
+<p class="note">Файл <code>PixPort-Setup-*.exe</code>. Программа сама проверяет обновления: ⚙ Настройки → Обновления → Проверить.</p>
+<p class="note">Требования: телефон и компьютер в одном Wi-Fi. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).</p>
+</section>
+
+<section id="support">
+<h2>Поддержка</h2>
+<p>Вопросы по оплате, ключам и работе программы — Telegram: <a href="https://t.me/akka_manager"><b>@akka_manager</b></a>. Отвечаем лично, обычно в течение дня.</p>
+</section>
+</main>
+
+<footer><div class="wrap">
+<a href="privacy.html">Политика конфиденциальности</a>
+<a href="terms.html">Пользовательское соглашение</a>
+<span>© 2026 PixPort</span>
+</div></footer>
+</body>
+</html>

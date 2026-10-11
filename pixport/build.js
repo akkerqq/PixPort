@@ -27,6 +27,8 @@ packager({
     /^\/native\/PixMenu\.dll$/,
     /^\/native\/test-.*$/,
     /^\/installer\.iss$/,
+    // сайт для GitHub Pages — в инсталлер не едет
+    /^\/docs($|\/)/,
     /^\/make-ico\.js$/,
     // генератор эмблемы и её исходник — людям едут только png+ico
     /^\/make-icon\.js$/,
