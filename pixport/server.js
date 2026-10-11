@@ -176,6 +176,7 @@ function uploadPage(token, folderName, lang) {
   }
   label.btn:active { transform:scale(.97); }
   label.btn.alt { background:var(--soft); color:var(--ink); border:1px solid var(--line); }
+  label.btn.file { background:transparent; color:var(--brand); border:2px dashed var(--brand); font-size:16px; padding:15px; }
   label.btn input { display:none; }
   #status {
     margin-top:16px; width:100%; background:var(--card); border:1px solid var(--line);
@@ -210,6 +211,10 @@ function uploadPage(token, folderName, lang) {
       <span data-i="btn_gallery">🖼 Выбрать из галереи</span>
       <input type="file" accept="image/*" multiple onchange="send(this.files)">
     </label>
+    ${isPro() ? `<label class="btn file">
+      <span data-i="btn_file">📁 Файл / видео</span>
+      <input type="file" multiple onchange="send(this.files)">
+    </label>` : ''}
   </div>
 
   <div id="status"></div>
@@ -814,6 +819,7 @@ ru: {
   nofolder: 'Запусти PixPort с папкой:<br><code>node server.js "C:\\папка"</code>',
   upHint: 'Фото сразу попадут в папку на компьютере',
   btn_shoot: '📷 Снять фото', btn_gallery: '🖼 Выбрать из галереи',
+  btn_file: '📁 Файл / видео',
   foot: 'PixPort · без проводов и мессенджеров',
   sending: 'Отправляю {f}…', sent: '✓ {n} — отправлено в папку',
   sendErr: 'Ошибка: {e}. Попробуй ещё раз.',
@@ -868,6 +874,7 @@ en: {
   nofolder: 'Start PixPort with a folder:<br><code>node server.js "C:\\folder"</code>',
   upHint: 'Photos land straight in the PC folder',
   btn_shoot: '📷 Take a photo', btn_gallery: '🖼 Choose from gallery',
+  btn_file: '📁 File / video',
   foot: 'PixPort · no cables, no messengers',
   sending: 'Sending {f}…', sent: '✓ {n} sent to folder',
   sendErr: 'Error: {e}. Try again.',
@@ -952,52 +959,71 @@ async function handleUpload(req, res, token) {
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) return json(res, 400, { ok: false, error: 'Нет файла' });
 
-  const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: 60 * 1024 * 1024 } });
+  // Лимиты: free — фото до 60 МБ, Pro — файлы/видео до 512 МБ.
+  // Пишем потоком во временный файл — большие видео не висят в памяти.
+  const pro = isPro();
+  const maxSize = pro ? 512 * 1024 * 1024 : 60 * 1024 * 1024;
+  const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: maxSize } });
   let saved = null;
   let failed = null;
   let pending = Promise.resolve(); // ждём завершения записи файла
 
   bb.on('file', (name, stream, info) => {
-    const chunks = [];
-    stream.on('data', c => chunks.push(c));
-    stream.on('limit', () => { failed = 'Файл больше 60 МБ'; });
-    pending = new Promise(resolve => stream.on('end', async () => {
-      if (failed) return resolve();
-      const buf = Buffer.concat(chunks);
+    const tmp = path.join(os.tmpdir(), `pixport-${Date.now()}-${Math.random().toString(16).slice(2)}.part`);
+    const out = fs.createWriteStream(tmp);
+    stream.on('limit', () => { failed = pro ? 'Файл больше 512 МБ' : 'Файл больше 60 МБ'; });
+    stream.pipe(out);
+    pending = new Promise(resolve => out.on('finish', async () => {
+      const done = () => { try { fs.rmSync(tmp, { force: true }); } catch (e) {} resolve(); };
+      if (failed) return done();
       const orig = info.filename || 'photo.jpg';
+      const ext = path.extname(orig).toLowerCase();
       try {
-        // Всегда JPG: поворачиваем по EXIF (rotate без аргументов) и кодируем.
-        // Free — потолок 960px по длинной стороне и quality 70: магия
-        // «снял — упало в папку» чувствуется, но на большом экране мылит —
-        // за оригиналом в Pro. Сжатие происходит здесь, на ПК,
-        // поэтому телефон и браузер ничего обойти не могут.
-        let img = sharp(buf).rotate();
-        if (!isPro()) {
+        if (pro && !isImageExt(ext)) {
+          // Pro и не картинка (видео, документ) — кладём как есть, без пережатия
+          const fname = uniqueName(s.folder, ext || '.bin');
+          fs.renameSync(tmp, path.join(s.folder, fname));
+          saved = fname;
+          s.received++;
+          s.files.push(fname);
+          console.log(`[OK, файл] ${path.join(s.folder, fname)}`);
+          return resolve(); // tmp уже переехал — чистить нечего
+        }
+        // Картинка: поворачиваем по EXIF и кодируем в JPG.
+        // Free — потолок 960px и quality 70 (на большом экране мылит —
+        // за оригиналом в Pro); Pro — оригинал, quality 92.
+        // Сжатие происходит здесь, на ПК, поэтому телефон и браузер
+        // ничего обойти не могут.
+        let img = sharp(tmp).rotate();
+        if (!pro) {
           img = img.resize({ width: 960, height: 960, fit: 'inside', withoutEnlargement: true });
         }
-        const jpg = await img.jpeg({ quality: isPro() ? 92 : 70, mozjpeg: true }).toBuffer();
         const fname = uniqueName(s.folder, '.jpg');
-        fs.writeFileSync(path.join(s.folder, fname), jpg);
+        await img.jpeg({ quality: pro ? 92 : 70, mozjpeg: true }).toFile(path.join(s.folder, fname));
         saved = fname;
         s.received++;
         s.files.push(fname);
         console.log(`[OK] ${path.join(s.folder, fname)}`);
       } catch (e) {
-        // Не удалось декодировать (редкий формат) — кладём как пришло.
-        try {
-          const ext = path.extname(orig).toLowerCase() || '.bin';
-          const fname = uniqueName(s.folder, ext);
-          fs.writeFileSync(path.join(s.folder, fname), buf);
-          saved = fname;
-          s.received++;
-          s.files.push(fname);
-          console.log(`[OK, оригинал] ${fname} (${e.message})`);
-        } catch (e2) {
-          failed = e2.message;
+        // Не картинка, хотя притворялась расширением:
+        // Pro — кладём как есть, free — вежливый отказ (иначе видео пролезет бесплатно).
+        if (pro) {
+          try {
+            const fname = uniqueName(s.folder, ext || '.bin');
+            fs.renameSync(tmp, path.join(s.folder, fname));
+            saved = fname;
+            s.received++;
+            s.files.push(fname);
+            console.log(`[OK, оригинал] ${fname} (${e.message})`);
+            return resolve();
+          } catch (e2) { failed = e2.message; }
+        } else {
+          failed = 'В бесплатной версии — только фото';
         }
       }
-      resolve();
+      done();
     }));
+    out.on('error', () => { failed = 'Ошибка записи'; });
   });
 
   bb.on('error', () => { failed = 'Ошибка чтения'; });
@@ -1009,6 +1035,11 @@ async function handleUpload(req, res, token) {
   });
 
   req.pipe(bb);
+}
+
+// Расширения, которые пробуем декодировать как картинки (остальное в Pro идёт как есть)
+function isImageExt(ext) {
+  return ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.avif', '.bmp', '.tiff', '.tif', '.heic', '.heif'].includes(ext);
 }
 
 /** Проверить папку и вернуть абсолютный путь. */

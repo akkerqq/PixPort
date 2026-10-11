@@ -92,6 +92,29 @@ function postForm(url, filename, buf) {
   const m3 = await sharp(fs.readFileSync(path.join(FOLDER, f3[0]))).metadata();
   check('free: маленькое фото не увеличивается', m3.width === 640 && m3.height === 480, `${m3.width}x${m3.height}`);
 
+  // --- файлы и видео: только Pro ---
+  const mp4 = Buffer.concat([Buffer.from('....ftypisom....mp4fake'), Buffer.alloc(5000, 7)]); // псевдо-mp4, байт в байт
+  // Pro кладёт как есть
+  await post(`${BASE}/api/license`, { key });
+  const page3 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const t3 = (page3.body.match(/const token = '([^']+)'/) || [])[1];
+  check('кнопка Файл видна в Pro', (await get(`${BASE}/u?t=${t3}`)).body.includes('data-i="btn_file"'));
+  const vd = await postForm(`${BASE}/u?t=${t3}`, 'clip.mp4', mp4);
+  check('pro: видео принято', vd.code === 200 && JSON.parse(vd.body).ok, vd.body);
+  await new Promise(r => setTimeout(r, 600));
+  const f4 = fs.readdirSync(FOLDER).sort((a, b) => fs.statSync(path.join(FOLDER, b)).mtimeMs - fs.statSync(path.join(FOLDER, a)).mtimeMs);
+  const rawBack = fs.readFileSync(path.join(FOLDER, f4[0]));
+  check('pro: видео лежит как есть (.mp4, байт в байт)', f4[0].endsWith('.mp4') && rawBack.equals(mp4), `${f4[0]}, ${rawBack.length} байт`);
+  await get(`${BASE}/api/close?t=${t3}`);
+  // free видео не берёт
+  await post(`${BASE}/api/license/off`);
+  const page4 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const t4 = (page4.body.match(/const token = '([^']+)'/) || [])[1];
+  check('кнопки Файл нет во free', !(await get(`${BASE}/u?t=${t4}`)).body.includes('data-i="btn_file"'));
+  const vdFree = await postForm(`${BASE}/u?t=${t4}`, 'clip.mp4', mp4);
+  check('free: видео отклонено', vdFree.code === 500 && vdFree.body.includes('только фото'), vdFree.body);
+  await get(`${BASE}/api/close?t=${t4}`);
+
   // восстановить состояние: было free
   clearLicense();
   await get(`${BASE}/api/close?t=${t2}`);
