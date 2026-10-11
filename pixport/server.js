@@ -422,6 +422,9 @@ function qrPage(token, folder, net) {
   #goProBtn {
     font-size:14px; font-weight:800; padding:11px 22px; border-radius:14px; cursor:pointer;
     border:0; background:var(--brand); color:var(--brand-ink); box-shadow:var(--shadow);
+    /* ширина фиксирована: смена текста на короткое PRO не должна сужать кнопку,
+       иначе ховер мигает и приходится целиться */
+    min-width:210px; text-align:center;
     transition:transform .15s ease, background-color .25s ease, color .25s ease, box-shadow .25s ease;
   }
   /* при наведении: растёт сильнее обычных кнопок, золотится, текст — просто PRO */
