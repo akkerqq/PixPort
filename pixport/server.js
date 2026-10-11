@@ -319,7 +319,7 @@ function qrPage(token, folder, net) {
   }
   .top { width:100%; max-width:420px; display:flex; align-items:center; justify-content:space-between; }
   .logo { font-size:12px; letter-spacing:4px; text-transform:uppercase; color:var(--brand); font-weight:800; }
-  #themeBtn {
+  #themeBtn, #settingsBtn {
     width:36px; height:36px; aspect-ratio:1/1; padding:0; flex:0 0 auto;
     border-radius:50%; border:1px solid var(--line); overflow:hidden;
     background:var(--card); font-size:16px; cursor:pointer;
@@ -392,7 +392,10 @@ function qrPage(token, folder, net) {
 <body>
   <div class="top">
     <div class="logo">PixPort</div>
-    <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
+    <div style="display:flex;gap:8px">
+      <button id="settingsBtn" style="display:none" onclick="openSettings()" title="Настройки">⚙</button>
+      <button id="themeBtn" onclick="toggleTheme()" title="Тёмная / светлая тема">🌙</button>
+    </div>
   </div>
   <div class="card">
   <div class="folder">📷 ${escapeHtml(folder)}</div>
@@ -401,15 +404,12 @@ function qrPage(token, folder, net) {
   <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
   <div class="actions">
     <button onclick="newQr()" data-i="btn_new">Новый QR</button>
-    <button onclick="closeQr()" data-i="btn_close">Закрыть</button>
     <button onclick="openFolder()" data-i="btn_open">Открыть папку</button>
     <button id="pickBtn" style="display:none" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
-    <button id="settingsBtn" style="display:none" onclick="openSettings()" data-i="btn_settings">⚙ Настройки</button>
   </div>
   <div class="hint" data-i="hint_scan">Сканируй камерой телефона · код живёт 30 минут</div>
   ${netHint}
   <div class="hint">PixPort v${APP_VERSION}</div>
-  <div class="hint" id="dropHint" style="display:none" data-i="dropHint">…или перетащи папку сюда</div>
   </div>
   <button class="helpLink" onclick="openHelp()" data-i="helpLink">Как пользоваться</button>
   <div class="overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
@@ -484,7 +484,6 @@ const desktop = !!window.pixport;
 
 if (desktop) {
   document.getElementById('pickBtn').style.display = '';
-  document.getElementById('dropHint').style.display = '';
   document.getElementById('settingsBtn').style.display = '';
 }
 
