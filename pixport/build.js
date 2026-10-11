@@ -43,6 +43,9 @@ packager({
     /^\/node_modules\/.*\/(test|tests|docs|example|examples)(\/|$)/,
   ],
   appVersion: require('./package.json').version, // одна версия в package.json — не держим вторую руками
+  // Иконка самого PixPort.exe (без расширения — packager добавит .ico).
+  // Без неё exe получал стандартную иконку Electron.
+  icon: require('path').join(__dirname, 'assets', 'icon'),
   win32metadata: {
     CompanyName: 'akkerqq',
     FileDescription: 'PixPort — фото с телефона сразу в папку',
