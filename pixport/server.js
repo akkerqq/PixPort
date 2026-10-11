@@ -430,6 +430,15 @@ function qrPage(token, folder, net) {
   /* при наведении: растёт сильнее обычных кнопок, золотится, текст — просто PRO */
   #goProBtn:hover { transform:scale(1.08); background-color:#ffb700; color:#2a1e00; box-shadow:0 6px 24px rgba(255,183,0,.45); }
   #goProBtn:active { transform:scale(.96); }
+  /* Купить Pro в модалке: та же золотая анимация, но кнопка на всю ширину —
+     scale чуть скромнее (1.05), иначе широкая кнопка перелетает за края */
+  #proPayBtn {
+    width:100%; font-size:16px; font-weight:800; padding:13px; border-radius:14px; cursor:pointer;
+    border:0; background:var(--brand); color:var(--brand-ink);
+    transition:transform .15s ease, background-color .25s ease, color .25s ease, box-shadow .25s ease;
+  }
+  #proPayBtn:hover { transform:scale(1.05); background-color:#ffb700; color:#2a1e00; box-shadow:0 6px 24px rgba(255,183,0,.45); }
+  #proPayBtn:active { transform:scale(.98); }
 </style>
 </head>
 <body>
@@ -512,11 +521,11 @@ function qrPage(token, folder, net) {
         <li data-i-html="proB1"><b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.</li>
         <li data-i-html="proB2"><b>Файлы и видео</b> до 512 МБ — как есть, без пережатия.</li>
       </ol>
-      <div class="closeRow" style="display:flex;gap:8px;justify-content:flex-end">
-        <button onclick="closePro()" data-i="btn_ok" style="background:var(--soft);color:var(--ink);border:1px solid var(--line)">Понятно</button>
-        <button onclick="proPay()" data-i="proPay">Купить Pro</button>
+      <div style="margin-top:14px">
+        <button id="proPayBtn" onclick="proPay()" data-i="proPay">Купить Pro</button>
       </div>
-      <div id="payMsg" style="font-size:13px;color:var(--muted);min-height:18px;margin-top:8px;text-align:right"></div>
+      <div id="payMsg" style="font-size:13px;color:var(--muted);min-height:18px;margin-top:8px;text-align:center"></div>
+      <div class="closeRow"><button onclick="closePro()" data-i="btn_ok" style="background:var(--soft);color:var(--ink);border:1px solid var(--line)">Понятно</button></div>
     </div>
   </div>
 
@@ -809,6 +818,12 @@ const goBtn = document.getElementById('goProBtn');
 if (goBtn) {
   goBtn.addEventListener('mouseenter', () => { goBtn.textContent = 'PRO'; });
   goBtn.addEventListener('mouseleave', () => { goBtn.textContent = t('goPro'); });
+}
+// Купить Pro в модалке — та же анимация
+const payBtn = document.getElementById('proPayBtn');
+if (payBtn) {
+  payBtn.addEventListener('mouseenter', () => { payBtn.textContent = 'PRO'; });
+  payBtn.addEventListener('mouseleave', () => { payBtn.textContent = t('proPay'); });
 }
 // QR-текстура на кнопках едет за курсором (позиция — в CSS-переменных,
 // transition на background-position даёт плавное отставание)
