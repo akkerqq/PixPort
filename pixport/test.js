@@ -73,8 +73,8 @@ function postForm(url, filename, buf) {
     const buf = fs.readFileSync(path.join(FOLDER, files[0]));
     check('это валидный JPG', buf[0] === 0xFF && buf[1] === 0xD8);
     const meta = await sharp(buf).metadata();
-    // free-режим (дефолт): длинная сторона режется до 1280 (720p)
-    check('free: ужато до 720p', Math.max(meta.width, meta.height) === 1280, `${meta.width}x${meta.height}`);
+    // free-режим (дефолт): длинная сторона режется до 960
+    check('free: ужато до 960', Math.max(meta.width, meta.height) === 960, `${meta.width}x${meta.height}`);
     check('имя по нашему шаблону', /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.jpg$/.test(files[0]), files[0]);
   }
 

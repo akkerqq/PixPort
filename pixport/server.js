@@ -199,7 +199,7 @@ function uploadPage(token, folderName, lang) {
   <div class="card">
   <div class="folder">📁 ${title}</div>
   <div class="hint" data-i="upHint">Фото сразу попадут в папку на компьютере</div>
-  <div id="planBadge" data-i="${plan}" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:var(--soft);color:var(--muted);border:1px solid var(--line)">${plan === 'planPro' ? 'Pro · оригинал' : 'Бесплатно · 720p'}</div>
+  <div id="planBadge" data-i="${plan}" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;background:var(--soft);color:var(--muted);border:1px solid var(--line)">${plan === 'planPro' ? 'Pro · оригинал' : 'Бесплатно · 960px'}</div>
 
   <div class="btns">
     <label class="btn">
@@ -407,7 +407,7 @@ function qrPage(token, folder, net) {
         <button data-lang-btn="en" onclick="setLang('en')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">EN</button>
       </div>
       <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="subTitle">Подписка PixPort</div>
-      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="subDesc" data-i="subDescFree">Бесплатно: фото до 720p (1280 px). С ключом Pro — оригинальное качество без ограничений.</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="subDesc" data-i="subDescFree">Бесплатно: фото до 960 px со сжатием. С ключом Pro — оригинальное качество без ограничений.</div>
       <div style="display:flex;gap:8px;margin-bottom:8px" id="subRow">
         <input id="subKey" placeholder="PP-XXXXXX-XXXXXX-XXXXXX" style="flex:1;min-width:0;font-size:13px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-family:ui-monospace,monospace">
         <button id="subBtn" onclick="subClick()" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
@@ -715,12 +715,12 @@ ru: {
   helpNote: 'Телефон и компьютер должны быть в одном Wi-Fi. QR-код живёт 30 минут. Закрытие окна сворачивает программу в трей — хоткей продолжает работать. Телефон не открывает страницу? Разреши PixPort в брандмауэре Windows (порт 8765).',
   btn_ok: 'Понятно', setTitle: '⚙ Настройки',
   subTitle: 'Подписка PixPort',
-  subDescFree: 'Бесплатно: фото до 720p (1280 px). С ключом Pro — оригинальное качество без ограничений.',
+  subDescFree: 'Бесплатно: фото до 960 px со сжатием. С ключом Pro — оригинальное качество без ограничений.',
   subDescPro: 'Pro активировано: оригинальное качество фото без ограничений.',
   subPlaceholder: 'PP-XXXXXX-XXXXXX-XXXXXX',
   subBtn: 'Активировать', subBtnOff: 'Отключить Pro',
   subOk: '✓ Pro активировано', subBad: 'Ключ не подходит', subOff: 'Возвращено в бесплатный режим',
-  planFree: 'Бесплатно · 720p', planPro: 'Pro · оригинал',
+  planFree: 'Бесплатно · 960px', planPro: 'Pro · оригинал',
   updTitle: 'Обновления',
   updIdle: 'Нажми «Проверить» — сравним твою версию с GitHub.',
   updCheck: 'Проверить', updDl: 'Скачать',
@@ -767,12 +767,12 @@ en: {
   helpNote: 'Phone and PC must be on the same Wi-Fi. QR lives 30 minutes. Closing the window minimizes to tray — the hotkey keeps working. Phone won\'t open the page? Allow PixPort through the Windows firewall (port 8765).',
   btn_ok: 'Got it', setTitle: '⚙ Settings',
   subTitle: 'PixPort subscription',
-  subDescFree: 'Free: photos up to 720p (1280 px). With a Pro key — original quality, no limits.',
+  subDescFree: 'Free: photos up to 960 px, compressed. With a Pro key — original quality, no limits.',
   subDescPro: 'Pro is active: original photo quality, no limits.',
   subPlaceholder: 'PP-XXXXXX-XXXXXX-XXXXXX',
   subBtn: 'Activate', subBtnOff: 'Turn off Pro',
   subOk: '✓ Pro activated', subBad: 'Key not valid', subOff: 'Back to free mode',
-  planFree: 'Free · 720p', planPro: 'Pro · original',
+  planFree: 'Free · 960px', planPro: 'Pro · original',
   updTitle: 'Updates',
   updIdle: 'Hit “Check” — we compare your version with GitHub.',
   updCheck: 'Check', updDl: 'Download',
@@ -886,14 +886,15 @@ async function handleUpload(req, res, token) {
       const orig = info.filename || 'photo.jpg';
       try {
         // Всегда JPG: поворачиваем по EXIF (rotate без аргументов) и кодируем.
-        // Free — потолок 720p (1280px по длинной стороне) и quality 82;
-        // Pro — оригинал без пережатия. Сжатие происходит здесь, на ПК,
+        // Free — потолок 960px по длинной стороне и quality 70: магия
+        // «снял — упало в папку» чувствуется, но на большом экране мылит —
+        // за оригиналом в Pro. Сжатие происходит здесь, на ПК,
         // поэтому телефон и браузер ничего обойти не могут.
         let img = sharp(buf).rotate();
         if (!isPro()) {
-          img = img.resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true });
+          img = img.resize({ width: 960, height: 960, fit: 'inside', withoutEnlargement: true });
         }
-        const jpg = await img.jpeg({ quality: isPro() ? 92 : 82, mozjpeg: true }).toBuffer();
+        const jpg = await img.jpeg({ quality: isPro() ? 92 : 70, mozjpeg: true }).toBuffer();
         const fname = uniqueName(s.folder, '.jpg');
         fs.writeFileSync(path.join(s.folder, fname), jpg);
         saved = fname;
@@ -1098,7 +1099,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button data-lang-btn="en" onclick="setLang('en')" style="font-size:14px;font-weight:700;padding:8px 18px;border-radius:10px;cursor:pointer;border:1px solid var(--line);background:var(--soft);color:var(--ink)">EN</button>
 </div>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="subTitle">Подписка PixPort</div>
-<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="subDesc" data-i="subDescFree">Бесплатно: фото до 720p (1280 px). С ключом Pro — оригинальное качество без ограничений.</div>
+<div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="subDesc" data-i="subDescFree">Бесплатно: фото до 960 px со сжатием. С ключом Pro — оригинальное качество без ограничений.</div>
 <div style="display:flex;gap:8px;margin-bottom:8px" id="subRow">
 <input id="subKey" placeholder="PP-XXXXXX-XXXXXX-XXXXXX" style="flex:1;min-width:0;font-size:13px;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-family:ui-monospace,monospace">
 <button id="subBtn" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>

@@ -20,7 +20,7 @@ Windows: **[Latest release](https://github.com/akkerqq/PixPort/releases/latest)*
 
 |  | Free | Pro |
 |---|---|---|
-| Качество фото | до 720p (1280 px) | оригинал без ограничений |
+| Качество фото | до 960 px со сжатием | оригинал без ограничений |
 | Цена | — | разовый ключ |
 
 Ключ вводится в ⚙ Настройки → Подписка.
@@ -48,4 +48,4 @@ npm run dist             # сборка инсталлера (требует Inn
 
 ---
 
-*EN: PixPort drops photos from your phone straight into a PC folder over local Wi-Fi — scan the QR, shoot, done. Free tier caps at 720p, Pro key unlocks originals. Windows download under Releases.*
+*EN: PixPort drops photos from your phone straight into a PC folder over local Wi-Fi — scan the QR, shoot, done. Free tier caps at 960 px compressed, Pro key unlocks originals. Windows download under Releases.*

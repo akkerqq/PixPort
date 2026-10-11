@@ -1,4 +1,4 @@
-// Проверка лицензий и лимита 720p: без ключа — ресайз, с ключом — оригинал.
+// Проверка лицензий и лимита 960px: без ключа — ресайз, с ключом — оригинал.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -59,7 +59,7 @@ function postForm(url, filename, buf) {
   const st = await get(`${BASE}/api/license`);
   check('GET /api/license → pro', JSON.parse(st.body).pro === true, st.body);
 
-  // --- лимит 720p vs Pro ---
+  // --- лимит 960px vs Pro ---
   const jpg = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: { r: 30, g: 90, b: 200 } } }).jpeg().toBuffer();
 
   // Pro: оригинал 3000x2000
@@ -72,7 +72,7 @@ function postForm(url, filename, buf) {
   check('Pro: 3000x2000 без потерь', m1.width === 3000 && m1.height === 2000, `${m1.width}x${m1.height}`);
   check('секция подписки в окне QR', page1.body.includes('id="subRow"') && page1.body.includes('subDescFree'));
 
-  // Free: 1280 по длинной стороне
+  // Free: 960 по длинной стороне
   const off = await post(`${BASE}/api/license/off`);
   check('deactivate ok', JSON.parse(off.body).pro === false, off.body);
   const page2 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
@@ -82,7 +82,7 @@ function postForm(url, filename, buf) {
   const f2 = fs.readdirSync(FOLDER).sort((a, b) => fs.statSync(path.join(FOLDER, b)).mtimeMs - fs.statSync(path.join(FOLDER, a)).mtimeMs);
   check('free: второй файл лёг', f2.length === 2, f2.join(','));
   const m2 = await sharp(fs.readFileSync(path.join(FOLDER, f2[0]))).metadata();
-  check('free: длинная сторона 1280', Math.max(m2.width, m2.height) === 1280, `${m2.width}x${m2.height}`);
+  check('free: длинная сторона 960', Math.max(m2.width, m2.height) === 960, `${m2.width}x${m2.height}`);
 
   // маленькое фото не дуем
   const small = await sharp({ create: { width: 640, height: 480, channels: 3, background: { r: 1, g: 2, b: 3 } } }).jpeg().toBuffer();
