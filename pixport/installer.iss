@@ -3,7 +3,7 @@
 ; Пишем в HKCU — без прав админа, приватность пользователя не трогаем.
 
 #define MyAppName "PixPort"
-#define MyAppVersion "0.2.6"
+#define MyAppVersion "1.0.0"
 #define MyAppPublisher "akkerqq"
 #define MyAppExeName "PixPort.exe"
 
@@ -45,7 +45,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 ; пункт по папке
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\PixPort"; ValueType: string; ValueName: "(Default)"; ValueData: "Показать QR (PixPort)"; Flags: uninsdeletekey; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\Directory\shell\PixPort"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletekey; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\PixPort\command"; ValueType: string; ValueName: "(Default)"; ValueData: """{app}\{#MyAppExeName}"" ""%V"""; Flags: uninsdeletekey; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\PixPort\command"; ValueType: string; ValueName: "(Default)"; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Flags: uninsdeletekey; Tasks: contextmenu
 ; пункт по фону папки
 Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\PixPort"; ValueType: string; ValueName: "(Default)"; ValueData: "Показать QR здесь (PixPort)"; Flags: uninsdeletekey; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\PixPort"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletekey; Tasks: contextmenu
