@@ -342,10 +342,19 @@ function qrPage(token, folder, net) {
     font-size:13.5px; font-weight:600; padding:9px 15px; border-radius:12px; cursor:pointer;
     border:1px solid var(--line); background:var(--soft); color:var(--ink);
     transition:transform .08s, filter .15s;
+    position:relative; overflow:hidden;
   }
   .actions button:hover { filter:brightness(.97); }
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
+  /* при наведении на кнопке проступает QR-текстура — просто для красоты */
+  .actions button::after {
+    content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background:url(/assets/qrtex-dark.png) center/26px 26px repeat;
+    opacity:0; transition:opacity .25s ease;
+  }
+  .actions button:hover::after { opacity:.16; }
+  [data-theme="dark"] .actions button::after { background-image:url(/assets/qrtex-light.png); }
   .hint { font-size:12px; color:var(--muted); text-align:center; }
   .ipRow { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; }
   .ipRow button {
@@ -1059,6 +1068,19 @@ async function handleRequest(req, res) {
       const ico = fs.readFileSync(path.join(__dirname, 'assets', 'icon.ico'));
       res.writeHead(200, { 'Content-Type': 'image/x-icon', 'Cache-Control': 'public, max-age=86400' });
       return res.end(ico);
+    } catch (e) { return json(res, 404, { ok: false }); }
+  }
+  if (url.pathname.startsWith('/assets/') && req.method === 'GET') {
+    // статика для страниц: только png/ico без подпапок (basename режет ../)
+    const f = path.basename(url.pathname);
+    if (!/^[a-z0-9-]+\.(png|ico)$/.test(f)) return json(res, 404, { ok: false });
+    try {
+      const buf = fs.readFileSync(path.join(__dirname, 'assets', f));
+      res.writeHead(200, {
+        'Content-Type': f.endsWith('.png') ? 'image/png' : 'image/x-icon',
+        'Cache-Control': 'public, max-age=86400',
+      });
+      return res.end(buf);
     } catch (e) { return json(res, 404, { ok: false }); }
   }
   if (isLoopback(req)) {
