@@ -347,9 +347,13 @@ function qrPage(token, folder, net) {
   .actions button:hover { filter:brightness(.97); transform:scale(1.05); }
   .actions button:active { transform:scale(.96); }
   .actions button:disabled { opacity:.6; cursor:default; }
-  /* текстура каждой кнопки — своя переменная: другие текстуры вешать сюда же */
-  #newQrBtn, #openBtn, #pickBtn { --tex:url(/assets/qrtex-dark.png); }
-  [data-theme="dark"] #newQrBtn, [data-theme="dark"] #openBtn, [data-theme="dark"] #pickBtn { --tex:url(/assets/qrtex-light.png); }
+  /* текстура каждой кнопки — своя переменная */
+  #newQrBtn { --tex:url(/assets/qrtex-dark.png); }
+  #openBtn { --tex:url(/assets/folder-dark.png); }
+  #pickBtn { --tex:url(/assets/swap-dark.png); }
+  [data-theme="dark"] #newQrBtn { --tex:url(/assets/qrtex-light.png); }
+  [data-theme="dark"] #openBtn { --tex:url(/assets/folder-light.png); }
+  [data-theme="dark"] #pickBtn { --tex:url(/assets/swap-light.png); }
   /* при наведении текстура проступает и едет за курсором */
   .actions button::after {
     content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
