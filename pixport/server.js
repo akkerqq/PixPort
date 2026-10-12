@@ -303,10 +303,8 @@ const CHUNKSZ = 512 * 1024; // куски под лимиты памяти вк�
 // а сторож с докачкой подбирает остальное. Накладные расходы на LAN незаметны.
 // А ГЛАВНОЕ (урок 12.10): одиночный POST летает везде, где куски встают.
 // Поэтому куски — только для гигантов, всё обычное идёт одним запросом как в 1.0.0.
-const CHUNK_THRESHOLD = 200 * 1024 * 1024; // меньше — одним запросом, больше — кусками.
-// 200 МБ: обычные видео (до пары минут) идут целиком; гиганты вроде 700 МБ — кусками
-// (целиком убьют память вкладки — проверено падением). На капризных сетях для гигантов
-// есть подсказка про точку доступа.
+const CHUNK_THRESHOLD = 32 * 1024 * 1024; // меньше — одним запросом, больше — кусками.
+// Куски едут тем же multipart, что фото (не octet): для middlebox неотличимо.
 
 async function sendFiles(el) {
   const files = Array.from(el.files || []); // снимок СРАЗУ: дальше сбрасываем input, а сброс опустошает живой FileList
@@ -399,9 +397,16 @@ function sendChunked(f, setPct) {
   crypto.getRandomValues(rnd);
   const cid = Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('');
   const postOne = idx => new Promise((resolve, reject) => {
+    // кусок — тем же multipart, что обычное фото: для middlebox неотличимо (урок 12.10).
+    // Поля ПЕРЕД файлом: сервер решает режим (кусок/целое) до начала чтения тела.
+    const fd = new FormData();
+    fd.append('cid', cid);
+    fd.append('i', String(idx));
+    fd.append('n', String(n));
+    fd.append('name', f.name);
+    fd.append('file', f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)), 'chunk');
     const x = new XMLHttpRequest();
-    x.open('POST', '/u?t=${token}&cid=' + cid + '&i=' + idx + '&n=' + n + '&name=' + encodeURIComponent(f.name));
-    x.setRequestHeader('Content-Type', 'application/octet-stream');
+    x.open('POST', '/u?t=${token}');
     x.timeout = 120000; // кусок дольше 2 минут — не ждём вечно, а ретраим (иначе вечный 0%)
     curXhr = x; // сторож ниже может его прибить при простое
     x.upload.onprogress = e => { // прогресс ВНУТРИ куска, а не только между кусками
@@ -424,7 +429,7 @@ function sendChunked(f, setPct) {
     x.onerror = () => { curXhr = null; reject(new Error('net')); };
     x.ontimeout = () => { curXhr = null; reject(new Error('timeout')); };
     x.onabort = () => { curXhr = null; reject(new Error('retry')); }; // прибил сторож — не ошибка, а повтор
-    x.send(f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)));
+    x.send(fd);
   });
   return (async () => {
     try {
@@ -1349,47 +1354,54 @@ async function finishUpload(s, tmp, orig) {
   }
 }
 
-async function handleChunk(req, res, token, p) {
-  // Соединения НЕ рвём: keep-alive переиспользует один сокет на все куски.
-  // Было наоборот (Connection: close) — роутерные DoS-фильтры резали частые
-  // новые соединения как флуд: первый кусок проходил, остальные висли (баг 12.10, регрессия 1.1.0).
-  const s = sessions.get(token);
-  if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
-  if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
-  const cid = p.get('cid') || '';
-  const i = parseInt(p.get('i'), 10), n = parseInt(p.get('n'), 10);
+async function ingestChunk(s, cidRaw, iRaw, nRaw, nameRaw, body) {
+  // Общее ядро приёма куска: транспорт любой (octet из старых сборок или
+  // multipart — неотличимый от обычного фото для middlebox). Возвращает
+  // { code, body } — готовый ответ клиенту.
+  const cid = cidRaw || '';
+  const i = parseInt(iRaw, 10), n = parseInt(nRaw, 10);
   if (!/^[0-9a-f]{16,64}$/i.test(cid) || !(i >= 0) || !(n > 0) || i >= n || n > 2048)
-    return json(res, 400, { ok: false, error: 'Плохой кусок' });
+    return { code: 400, body: { ok: false, error: 'Плохой кусок' } };
   const pro = isPro();
   const maxSize = pro ? 10 * 1024 * 1024 * 1024 : 60 * 1024 * 1024;
-  let body;
-  try { body = await readBody(req, CHUNK_MAX); }
-  catch (e) { return json(res, 500, { ok: false, error: 'Кусок больше 32 МБ' }); }
   sweepUploads();
   let u = uploads.get(cid);
   if (!u) {
-    if (i !== 0) return json(res, 400, { ok: false, error: 'Начни с нулевого куска' });
-    const name = (path.basename(p.get('name') || 'photo.jpg').slice(0, 120) || 'photo.jpg');
+    if (i !== 0) return { code: 400, body: { ok: false, error: 'Начни с нулевого куска' } };
+    const name = (path.basename(nameRaw || 'photo.jpg').slice(0, 120) || 'photo.jpg');
     const tmp = path.join(os.tmpdir(), `pixport-c-${Date.now()}-${cid.slice(0, 12)}.part`);
     fs.writeFileSync(tmp, Buffer.alloc(0));
     u = { tmp, name, n, got: 0, size: 0, ts: Date.now(), pro };
     uploads.set(cid, u);
   }
-  if (i < u.got) return json(res, 200, { ok: true, chunk: i }); // дубль (ретрай после обрыва ответа) — уже лежит
-  if (i !== u.got || n !== u.n) return json(res, 409, { ok: false, error: 'Порядок кусков', wait: u.got });
+  if (i < u.got) return { code: 200, body: { ok: true, chunk: i } }; // дубль (ретрай после обрыва ответа) — уже лежит
+  if (i !== u.got || n !== u.n) return { code: 409, body: { ok: false, error: 'Порядок кусков', wait: u.got } };
   u.ts = Date.now();
   fs.appendFileSync(u.tmp, body);
   u.got++; u.size += body.length;
   if (u.size > maxSize) {
     try { fs.rmSync(u.tmp, { force: true }); } catch (e) {}
     uploads.delete(cid);
-    return json(res, 500, { ok: false, error: u.pro ? 'Файл больше 10 ГБ' : 'Файл больше 60 МБ' });
+    return { code: 500, body: { ok: false, error: u.pro ? 'Файл больше 10 ГБ' : 'Файл больше 60 МБ' } };
   }
-  if (u.got < u.n) return json(res, 200, { ok: true, chunk: i });
+  if (u.got < u.n) return { code: 200, body: { ok: true, chunk: i } };
   uploads.delete(cid);
   const r = await finishUpload(s, u.tmp, u.name);
-  if (r.saved) return json(res, 200, { ok: true, file: r.saved, total: s.received });
-  return json(res, 500, { ok: false, error: r.failed });
+  if (r.saved) return { code: 200, body: { ok: true, file: r.saved, total: s.received } };
+  return { code: 500, body: { ok: false, error: r.failed } };
+}
+
+async function handleChunk(req, res, token, p) {
+  // octet-путь (старые dev-сборки): тело — сырые байты, параметры — в query.
+  // Новые шлют multipart через общий busboy ниже — для middlebox неотличимо от фото.
+  const s = sessions.get(token);
+  if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
+  if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
+  let body;
+  try { body = await readBody(req, CHUNK_MAX); }
+  catch (e) { return json(res, 500, { ok: false, error: 'Кусок больше 32 МБ' }); }
+  const r = await ingestChunk(s, p.get('cid'), p.get('i'), p.get('n'), p.get('name'), body);
+  return json(res, r.code, r.body);
 }
 
 async function handleUpload(req, res, token) {
@@ -1414,9 +1426,35 @@ async function handleUpload(req, res, token) {
   const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: maxSize } });
   let saved = null;
   let failed = null;
+  let chunkResp = null; // ответ кусока (ok+chunk / ok+file / ошибка) — уходит как есть, мимо логики одиночных файлов
   let pending = Promise.resolve(); // ждём завершения записи файла
+  const fields = {}; // поля формы; клиент шлёт их ПЕРЕД файлом — к началу 'file' уже на месте
+  bb.on('field', (fname, val) => {
+    if (['cid', 'i', 'n', 'name'].includes(fname)) fields[fname] = String(val).slice(0, 160);
+  });
 
   bb.on('file', (name, stream, info) => {
+    if (fields.cid) {
+      // кусок в multipart-упаковке: для middlebox неотличим от обычного фото (урок 12.10).
+      // Куски мелкие — буферим в память, дальше общее ядро ingestChunk.
+      const bufs = [];
+      let len = 0, tooBig = false;
+      stream.on('data', c => {
+        if (tooBig) return; // дальше только осушаем поток
+        len += c.length;
+        if (len > CHUNK_MAX) { tooBig = true; bufs.length = 0; } else bufs.push(c);
+      });
+      pending = new Promise(resolve => stream.on('end', async () => {
+        if (tooBig) { failed = 'Кусок больше 32 МБ'; return resolve(); }
+        const r = await ingestChunk(s, fields.cid, fields.i, fields.n, fields.name, Buffer.concat(bufs));
+        chunkResp = r; // весь ответ куска — клиенту без перетолмачивания
+        if (r.body.ok && r.body.file) saved = r.body.file;
+        else if (!r.body.ok && r.body.chunk === undefined) failed = r.body.error;
+        resolve();
+      }));
+      stream.on('limit', () => { failed = 'Кусок больше 32 МБ'; });
+      return;
+    }
     const tmp = path.join(os.tmpdir(), `pixport-${Date.now()}-${Math.random().toString(16).slice(2)}.part`);
     const out = fs.createWriteStream(tmp);
     stream.on('limit', () => { failed = pro ? 'Файл больше 10 ГБ' : 'Файл больше 60 МБ'; });
@@ -1433,6 +1471,7 @@ async function handleUpload(req, res, token) {
   bb.on('error', () => { failed = 'Ошибка чтения'; });
   bb.on('close', async () => {
     await pending; // боди прочитано — ждём, пока файл доедет до папки
+    if (chunkResp) return json(res, chunkResp.code, chunkResp.body);
     if (failed) json(res, 500, { ok: false, error: failed });
     else if (saved) json(res, 200, { ok: true, file: saved, total: s.received });
     else json(res, 400, { ok: false, error: 'Файл не получен' });

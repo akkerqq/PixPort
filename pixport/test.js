@@ -32,6 +32,32 @@ function postChunk(token, cid, i, n, filename, buf) {
     req.end(buf);
   });
 }
+// кусок в multipart-упаковке (как шлёт новый клиент): поля ПЕРЕД файлом
+function postChunkMulti(token, fields, filename, buf) {
+  const boundary = '----pixport' + Math.random().toString(16).slice(2);
+  const parts = [];
+  for (const k of Object.keys(fields)) {
+    parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${fields[k]}\r\n`));
+  }
+  parts.push(Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="chunk"\r\n` +
+    `Content-Type: application/octet-stream\r\n\r\n`));
+  parts.push(buf);
+  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
+  const body = Buffer.concat(parts);
+  return new Promise((res, rej) => {
+    const req = http.request({
+      hostname: '127.0.0.1', port: 8765, method: 'POST', path: `/u?t=${token}`,
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length }
+    }, r => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => res({ code: r.statusCode, body: d }));
+    });
+    req.on('error', rej);
+    req.end(body);
+  });
+}
 
 function postForm(url, filename, buf) {
   const boundary = '----pixport' + Math.random().toString(16).slice(2);
@@ -139,6 +165,17 @@ function postForm(url, filename, buf) {
   check('чанк 1 склеен в файл', c1.code === 200 && JSON.parse(c1.body).ok, c1.body);
   const cbad = await postChunk(token2, 'zzz', 0, 2, 'x.jpg', jpg.subarray(0, half));
   check('кривой cid отклонён', cbad.code === 400, cbad.body);
+
+  // 10. куски в multipart-упаковке (новые клиенты): для middlebox как обычное фото
+  const page3 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const token3 = (page3.body.match(/const token = '([^']+)'/) || [])[1];
+  const cid3 = 'feedface12345678';
+  const m0 = await postChunkMulti(token3, { cid: cid3, i: 0, n: 2, name: 'IMG_MULTI.jpg' }, 'chunk', jpg.subarray(0, half));
+  check('multipart-кусок 0 принят', m0.code === 200 && JSON.parse(m0.body).ok, m0.body);
+  const m1 = await postChunkMulti(token3, { cid: cid3, i: 1, n: 2, name: 'IMG_MULTI.jpg' }, 'chunk', jpg.subarray(half));
+  check('multipart-кусок 1 склеен в файл', m1.code === 200 && JSON.parse(m1.body).ok, m1.body);
+  const mno = await postChunkMulti(token3, { i: 0, n: 1, name: 'x.jpg' }, 'chunk', jpg.subarray(0, 100));
+  check('multipart без cid — обычное фото (мусор отклонён как фото)', mno.code === 500 && mno.body.includes('только фото'), mno.body);
 
   console.log('\nПРОЙДЕНО:');
   ok.forEach(o => console.log('  ✓ ' + o));
