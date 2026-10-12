@@ -268,7 +268,7 @@ const LIMSTR = ${JSON.stringify(limStr)};
 const CHUNKSZ = 8 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку)
 
 async function sendFiles(el) {
-  const files = el.files;
+  const files = Array.from(el.files || []); // снимок СРАЗУ: дальше сбрасываем input, а сброс опустошает живой FileList
   el.value = ''; // сброс: повторный выбор того же файла снова сработает
   if (!files || !files.length || sending) return;
   sending = true;
