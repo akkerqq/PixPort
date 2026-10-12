@@ -301,6 +301,9 @@ const CHUNKSZ = 512 * 1024; // куски под лимиты памяти вк�
 // История размеров: 8 МБ → 2 МБ → 1 МБ → 512 КБ. Логика выживания на душных роутерах:
 // душилка бьёт по длинным соединениям — короткие куски проскакивают раньше, чем их успевают прибить,
 // а сторож с докачкой подбирает остальное. Накладные расходы на LAN незаметны.
+// А ГЛАВНОЕ (урок 12.10): одиночный POST летает везде, где куски встают.
+// Поэтому куски — только для гигантов, всё обычное идёт одним запросом как в 1.0.0.
+const CHUNK_THRESHOLD = 32 * 1024 * 1024; // меньше — одним запросом, больше — кусками
 
 async function sendFiles(el) {
   const files = Array.from(el.files || []); // снимок СРАЗУ: дальше сбрасываем input, а сброс опустошает живой FileList
@@ -325,8 +328,8 @@ async function sendFiles(el) {
     st.textContent = t('sending', { f: f.name });
     wrap.style.display = ''; pct.style.display = ''; setPct(0);
     try {
-      if (f.size > CHUNKSZ) await sendChunked(f, setPct);
-      else await sendSingle(f, setPct);
+      if (f.size > CHUNK_THRESHOLD) { j('большой — кусками'); await sendChunked(f, setPct); }
+      else { j('обычный — одним запросом'); await sendSingle(f, setPct); }
       total++;
       j('DONE ' + f.name + ' (всего ' + total + ')');
       st.className = 'show';
