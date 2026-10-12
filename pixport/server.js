@@ -282,7 +282,8 @@ window.addEventListener('unhandledrejection', e => {
 });
 const MAXSIZE = ${maxBytes}; // потолок тарифа — отказ сразу, а не после 10 минут заливки
 const LIMSTR = ${JSON.stringify(limStr)};
-const CHUNKSZ = 8 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку)
+const CHUNKSZ = 2 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку).
+// Было 8 МБ — Safari на больших блобах перестаёт слать события прогресса и встаёт; 2 МБ глотает бодрее.
 
 async function sendFiles(el) {
   const files = Array.from(el.files || []); // снимок СРАЗУ: дальше сбрасываем input, а сброс опустошает живой FileList
@@ -345,8 +346,19 @@ function sendChunked(f, setPct) {
   // большие файлы — кусками: вкладка не давится, прогресс честный,
   // обрыв докачиваем с места (сервер помнит, сколько кусков уже лежит)
   const n = Math.ceil(f.size / CHUNKSZ);
-  const t0 = Date.now(); // старт для спидометра
   const pctEl = document.getElementById('upPct');
+  let curB = 0, curP = 0, lastB = 0, lastT = Date.now(); // байты для спидометра
+  const fmtSpd = bps => bps >= 1048576
+    ? (bps / 1048576).toFixed(1) + ' МБ/с'
+    : Math.round(bps / 1024) + ' КБ/с';
+  // тикаем раз в секунду сами: если события прогресса встали — увидим честные 0 КБ/с,
+  // а не застывшую цифру
+  const spdTimer = setInterval(() => {
+    const now = Date.now(), dt = (now - lastT) / 1000;
+    const bps = dt > 0 ? (curB - lastB) / dt : 0;
+    lastB = curB; lastT = now;
+    pctEl.textContent = curP + '% · ' + fmtSpd(bps);
+  }, 1000);
   const rnd = new Uint8Array(16);
   crypto.getRandomValues(rnd);
   const cid = Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('');
@@ -357,15 +369,9 @@ function sendChunked(f, setPct) {
     x.timeout = 120000; // кусок дольше 2 минут — не ждём вечно, а ретраим (иначе вечный 0%)
     x.upload.onprogress = e => { // прогресс ВНУТРИ куска, а не только между кусками
       if (!e.lengthComputable) return;
-      const doneBytes = idx * CHUNKSZ + e.loaded;
-      setPct(Math.round(doneBytes / f.size * 100));
-      const el = (Date.now() - t0) / 1000; // спидометр: «стоит» или «ползёт» — видно сразу
-      if (el > 1) {
-        const bps = doneBytes / el;
-        pctEl.textContent += ' · ' + (bps >= 1048576
-          ? (bps / 1048576).toFixed(1) + ' МБ/с'
-          : Math.round(bps / 1024) + ' КБ/с');
-      }
+      curB = idx * CHUNKSZ + e.loaded;
+      curP = Math.round(curB / f.size * 100);
+      setPct(curP);
     };
     x.onload = () => {
       let j = null;
@@ -381,6 +387,7 @@ function sendChunked(f, setPct) {
     x.send(f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)));
   });
   return (async () => {
+    try {
     let idx = 0;
     while (idx < n) {
       let ok = false, lastErr = null;
@@ -393,8 +400,10 @@ function sendChunked(f, setPct) {
         } catch (e) { lastErr = e; await new Promise(r2 => setTimeout(r2, 800 * (a + 1))); }
       }
       if (!ok) throw lastErr;
-      setPct(Math.round(idx / n * 100));
+      curP = Math.round(idx / n * 100);
+      setPct(curP);
     }
+    } finally { clearInterval(spdTimer); }
   })();
 }
 // не даём экрану заснуть во время загрузки
