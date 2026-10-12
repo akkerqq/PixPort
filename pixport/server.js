@@ -282,8 +282,9 @@ window.addEventListener('unhandledrejection', e => {
 });
 const MAXSIZE = ${maxBytes}; // потолок тарифа — отказ сразу, а не после 10 минут заливки
 const LIMSTR = ${JSON.stringify(limStr)};
-const CHUNKSZ = 2 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку).
-// Было 8 МБ — Safari на больших блобах перестаёт слать события прогресса и встаёт; 2 МБ глотает бодрее.
+const CHUNKSZ = 1 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку).
+// Было 8 МБ, потом 2 МБ — Safari на больших блобах перестаёт слать события прогресса и встаёт.
+// Плюс роутерный NAT прибивает длинные соединения: короткие куски проскакивают чаще.
 
 async function sendFiles(el) {
   const files = Array.from(el.files || []); // снимок СРАЗУ: дальше сбрасываем input, а сброс опустошает живой FileList
@@ -1245,9 +1246,9 @@ function readBody(req, limit = 60 * 1024 * 1024) {
   });
 }
 
-function json(res, code, obj) {
+function json(res, code, obj, extra) {
   const b = JSON.stringify(obj);
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(code, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, extra || {}));
   res.end(b);
 }
 
@@ -1320,6 +1321,9 @@ async function finishUpload(s, tmp, orig) {
 }
 
 async function handleChunk(req, res, token, p) {
+  // каждое соединение закрываем: роутерный NAT любит прибивать переиспользуемые
+  // keep-alive между кусками — тогда встаёт всё со второго запроса (баг 12.10)
+  res.setHeader('Connection', 'close');
   const s = sessions.get(token);
   if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
   if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
@@ -1369,6 +1373,7 @@ async function handleUpload(req, res, token) {
     const u = new URL(req.url, 'http://x');
     if (u.searchParams.get('cid')) return handleChunk(req, res, token, u.searchParams);
   } catch (e) {}
+  res.setHeader('Connection', 'close'); // то же, что в чанках: свежее соединение на каждую заливку
 
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) return json(res, 400, { ok: false, error: 'Нет файла' });
