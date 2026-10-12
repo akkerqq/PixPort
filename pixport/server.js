@@ -275,7 +275,7 @@ function j(msg) {
     jlog.push(new Date().toISOString().slice(11, 19) + ' ' + msg);
     if (jlog.length > 40) jlog.shift();
     document.getElementById('ulog').style.display = '';
-    document.getElementById('ulogPre').textContent = jlog.join('\n');
+    document.getElementById('ulogPre').textContent = jlog.join('\\n');
   } catch (e) {}
 }
 // любая молчаливая JS-ошибка на странице — красным в статус, а не тишина:
