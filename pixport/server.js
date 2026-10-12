@@ -22,7 +22,7 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const sharp = require('sharp');
 const Busboy = require('busboy');
-const { licenseState, activateKey, clearLicense, isPro } = require('./license');
+const { licenseState, activateKey, clearLicense, isPro, machineId } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
@@ -574,6 +574,7 @@ function qrPage(token, folder, net) {
           <button id="subCopy" onclick="subCopyKey()" style="font-size:12px;padding:7px 12px;flex:0 0 auto" data-i="copyBtn">Копировать</button>
         </div>
       </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px"><span data-i="pcCodeHint">Код этого ПК для именного ключа — пришли его в поддержку вместе с оплатой:</span><br><code id="pcCode" style="font-size:12px;color:var(--ink)">…</code> <button id="pcCopy" onclick="pcCopyCode()" style="font-size:12px;padding:5px 10px" data-i="copyBtn">Копировать</button></div>
       <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="updTitle">Обновления</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="updStatus" data-i="updIdle">Нажми «Проверить» — сравним твою версию с GitHub.</div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -692,10 +693,26 @@ async function subCopyKey() {
   b.textContent = t('copied');
   setTimeout(() => { b.textContent = old; }, 1500);
 }
+async function pcCopyCode() {
+  const code = document.getElementById('pcCode').textContent || '';
+  if (!code || code === '…') return;
+  try { await navigator.clipboard.writeText(code); }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = code; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+  }
+  const b = document.getElementById('pcCopy');
+  const old = b.textContent;
+  b.textContent = t('copied');
+  setTimeout(() => { b.textContent = old; }, 1500);
+}
 async function loadSub() {
   try {
     const st = await (await fetch('/api/license?t=' + token)).json();
     paintSub(!!st.pro, st.key || null);
+    if (st.hwid) document.getElementById('pcCode').textContent = st.hwid;
   } catch (e) {}
 }
 function paintSub(pro, key) {
@@ -999,6 +1016,7 @@ ru: {
   subBtn: 'Активировать', subBtnOff: 'Отключить Pro',
   subOk: '✓ Pro активировано', subBad: 'Ключ не подходит', subOff: 'Возвращено в бесплатный режим',
   subKeySaved: 'Сохраните ключ — пригодится при переустановке:', copyBtn: 'Копировать', copied: 'Скопировано',
+  pcCodeHint: 'Код этого ПК для именного ключа — пришли его в поддержку вместе с оплатой:',
   planFree: 'Бесплатно · 960px', planPro: 'Pro · оригинал',
   autoStart: 'Запускаться вместе с Windows',
   updTitle: 'Обновления',
@@ -1062,6 +1080,7 @@ en: {
   subBtn: 'Activate', subBtnOff: 'Turn off Pro',
   subOk: '✓ Pro activated', subBad: 'Key not valid', subOff: 'Back to free mode',
   subKeySaved: 'Save your key — you’ll need it after reinstall:', copyBtn: 'Copy', copied: 'Copied',
+  pcCodeHint: 'This PC’s code for a personal key — send it to support along with your payment:',
   planFree: 'Free · 960px', planPro: 'Pro · original',
   autoStart: 'Start with Windows',
   updTitle: 'Updates',
@@ -1468,7 +1487,7 @@ async function handleRequest(req, res) {
     /* --- подписка: статус и активация ключа --- */
     if (url.pathname === '/api/license' && req.method === 'GET') {
       const st = licenseState();
-      return json(res, 200, { ok: true, pro: st.pro, key: st.key || null });
+      return json(res, 200, { ok: true, pro: st.pro, key: st.key || null, hwid: machineId() });
     }
     if (url.pathname === '/api/license' && req.method === 'POST') {
       const body = await readBody(req, 4 * 1024).catch(() => Buffer.alloc(0));
@@ -1538,6 +1557,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button id="subCopy" style="font-size:12px;padding:7px 12px;flex:0 0 auto" data-i="copyBtn">Копировать</button>
 </div>
 </div>
+<div style="font-size:12px;color:var(--muted);margin-bottom:10px"><span data-i="pcCodeHint">Код этого ПК для именного ключа — пришли его в поддержку вместе с оплатой:</span><br><code id="pcCode" style="font-size:12px;color:var(--ink)">…</code> <button id="pcCopy" style="font-size:12px;padding:5px 10px" data-i="copyBtn">Копировать</button></div>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="updTitle">Обновления</div>
 <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="updStatus" data-i="updIdle">Нажми «Проверить» — сравним твою версию с GitHub.</div>
 <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -1639,10 +1659,26 @@ if (window.pixport) {
     b.textContent = t('copied');
     setTimeout(() => { b.textContent = old; }, 1500);
   };
+  document.getElementById('pcCopy').onclick = async () => {
+    const code = document.getElementById('pcCode').textContent || '';
+    if (!code || code === '…') return;
+    try { await navigator.clipboard.writeText(code); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = code; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e2) {}
+      ta.remove();
+    }
+    const b = document.getElementById('pcCopy');
+    const old = b.textContent;
+    b.textContent = t('copied');
+    setTimeout(() => { b.textContent = old; }, 1500);
+  };
   async function subSync() {
     try {
       const st = await (await fetch('/api/license')).json();
       paintSub(!!st.pro, st.key || null);
+      if (st.hwid) document.getElementById('pcCode').textContent = st.hwid;
     } catch (e) {}
   }
   function paintSub(pro, key) {

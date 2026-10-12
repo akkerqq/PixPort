@@ -3,7 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
-const { mintKey, validateKey, activateKey, clearLicense, licenseState } = require('./license');
+const { mintKey, mintBoundKey, validateKey, activateKey, clearLicense, licenseState } = require('./license');
 
 const BASE = 'http://127.0.0.1:8765';
 const FOLDER = process.argv[2];
@@ -48,6 +48,17 @@ function postForm(url, filename, buf) {
   check('мусор отклонён', !validateKey('hello'));
   check('пустой отклонён', !validateKey(''));
 
+  // --- юнит: именные ключи (привязка к железу) ---
+  process.env.PIXPORT_HWID = 'TEST-PC-1';
+  const bk = mintBoundKey('TEST-PC-1');
+  check('именной: свой код — ок', validateKey(bk), bk);
+  process.env.PIXPORT_HWID = 'TEST-PC-2';
+  check('именной: чужой ПК — отказ', !validateKey(bk));
+  check('открытый: работает на любом ПК', validateKey(key));
+  process.env.PIXPORT_HWID = 'TEST-PC-1';
+  check('именной: кривой формат — отказ', !validateKey(bk.slice(0, -2) + 'ZZ'));
+  delete process.env.PIXPORT_HWID;
+
   // --- активация через API (localhost) ---
   const off0 = await post(`${BASE}/api/license/off`);
   check('сброс до теста ok', JSON.parse(off0.body).pro === false, off0.body);
@@ -57,7 +68,9 @@ function postForm(url, filename, buf) {
   const gs = JSON.parse(good.body);
   check('верный ключ → Pro', gs.ok === true && gs.pro === true, good.body);
   const st = await get(`${BASE}/api/license`);
-  check('GET /api/license → pro', JSON.parse(st.body).pro === true, st.body);
+  const stj = JSON.parse(st.body);
+  check('GET /api/license → pro', stj.pro === true, st.body);
+  check('GET /api/license → код машины', typeof stj.hwid === 'string' && stj.hwid.length > 0, st.body);
 
   // --- лимит 960px vs Pro ---
   const jpg = await sharp({ create: { width: 3000, height: 2000, channels: 3, background: { r: 30, g: 90, b: 200 } } }).jpeg().toBuffer();
@@ -71,6 +84,16 @@ function postForm(url, filename, buf) {
   const m1 = await sharp(fs.readFileSync(path.join(FOLDER, f1[0]))).metadata();
   check('Pro: 3000x2000 без потерь', m1.width === 3000 && m1.height === 2000, `${m1.width}x${m1.height}`);
   check('секция подписки в окне QR', page1.body.includes('id="subRow"') && page1.body.includes('subDescFree'));
+  check('код машины + показ ключа в настройках', page1.body.includes('id="pcCode"') && page1.body.includes('id="subKeyShow"') && page1.body.includes('pcCodeHint'));
+
+  // --- именной ключ сквозняком через API: под код машины сервера — Pro, под чужой — 400 ---
+  await post(`${BASE}/api/license/off`);
+  const bgood = await post(`${BASE}/api/license`, { key: mintBoundKey(stj.hwid) });
+  check('именной под этот ПК → Pro', JSON.parse(bgood.body).pro === true, bgood.body);
+  await post(`${BASE}/api/license/off`);
+  const bbad = await post(`${BASE}/api/license`, { key: mintBoundKey('PC-СОСЕДА-123') });
+  check('именной под чужой ПК → 400', bbad.code === 400, bbad.body);
+  await post(`${BASE}/api/license`, { key }); // вернуть Pro для дальнейших кейсов
 
   // Free: 960 по длинной стороне
   const off = await post(`${BASE}/api/license/off`);

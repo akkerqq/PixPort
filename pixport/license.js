@@ -14,6 +14,14 @@
  * server.js. Если продукт заживёт — переезжаем на серверную проверку.
  *
  * Генерация ключей: node genkey.js (файл в сборку не едет).
+ *  - открытые ключи (mintKey): работают на любом ПК;
+ *  - именные ключи (mintBoundKey): привязаны к коду машины покупателя
+ *    (при ручных продажах код присылают в чат поддержки вместе с оплатой).
+ *    Чужая машина — подпись не сходится, Pro не включится.
+ *    Старые открытые ключи продолжают работать (другой домен подписи).
+ * Честно: привязка отсекает «поделиться с другом», но не взлом —
+ * секрет и проверка читаются из JS. Серверная проверка — следующим шагом,
+ * когда ключи начнут гулять в масштабе.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -67,6 +75,43 @@ function sign(body) {
   return crypto.createHmac('sha256', SECRET).update(body).digest().subarray(0, SIG_BYTES);
 }
 
+// Отдельный домен подписи для именных ключей: старые открытые ключи
+// под ним не валидны (и наоборот) — ветки не пересекаются, миграция не нужна.
+function signBound(body) {
+  return crypto.createHmac('sha256', SECRET + '|bound-v1').update(body).digest().subarray(0, SIG_BYTES);
+}
+
+/* ------------------------------------------------- код машины (привязка) */
+
+// Стабильный отпечаток ПК: MachineGuid из реестра (переживает переустановку
+// программ, но не переустановку Windows — тогда выдаём новый ключ руками).
+// PIXPORT_HWID — подмена для тестов.
+let _mid = null;
+function machineId() {
+  if (process.env.PIXPORT_HWID) return String(process.env.PIXPORT_HWID);
+  if (_mid) return _mid;
+  let id = '';
+  try {
+    const out = require('child_process').execSync(
+      'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+      { timeout: 5000, windowsHide: true });
+    const m = String(out).match(/MachineGuid\s+REG_SZ\s+([0-9a-f-]+)/i);
+    if (m) id = m[1];
+  } catch (e) { /* нет прав или не Windows — уходим на запасной */ }
+  if (!id) {
+    try { id = os.hostname() + ':' + os.userInfo().username; }
+    catch (e) { id = 'unknown'; }
+  }
+  _mid = id;
+  return id;
+}
+
+// 2 байта от хэша кода машины: коллизии при наших объёмах — пыль,
+// а в 5-байтовое тело ключа больше и не влезет (честно фиксируем).
+function hwidHash(id) {
+  return crypto.createHash('sha256').update('pixport-hwid-v1|' + id).digest().subarray(0, 2);
+}
+
 function normalize(key) {
   return String(key || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
@@ -84,6 +129,12 @@ function mintKey() {
   return format(body, sign(body));
 }
 
+/** Именной ключ под конкретный код машины (прислали в чат вместе с оплатой). */
+function mintBoundKey(hwid) {
+  const body = Buffer.concat([hwidHash(String(hwid || '')), crypto.randomBytes(3)]);
+  return format(body, signBound(body));
+}
+
 /**
  * Проверить ключ. true/false, без сообщений — что именно не так,
  * злоумышленнику знать не нужно.
@@ -98,8 +149,12 @@ function validateKey(key) {
   const body = decoded.subarray(0, BODY_BYTES);
   const sig = decoded.subarray(BODY_BYTES, BODY_BYTES + SIG_BYTES);
   if (body.length !== BODY_BYTES || sig.length !== SIG_BYTES) return false;
-  const expect = sign(body);
-  return sig.length === expect.length && crypto.timingSafeEqual(sig, expect);
+  const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(a, b);
+  // открытый ключ (включая все выданные раньше) — работает везде
+  if (safeEq(sig, sign(body))) return true;
+  // именной: подпись сошлась — сверяем отпечаток этой машины
+  if (safeEq(sig, signBound(body))) return body.subarray(0, 2).equals(hwidHash(machineId()));
+  return false;
 }
 
 /* ----------------------------------------------------- хранение состояния */
@@ -143,4 +198,4 @@ function clearLicense() {
   return licenseState();
 }
 
-module.exports = { mintKey, validateKey, licenseState, isPro, activateKey, clearLicense };
+module.exports = { mintKey, mintBoundKey, validateKey, machineId, licenseState, isPro, activateKey, clearLicense };
