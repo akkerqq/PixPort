@@ -1534,6 +1534,7 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <p data-i-html="pickDesc">Нажми кнопку ниже или перетащи папку в это окно.<br>Потом наведи камеру телефона на QR-код.</p>
 <button id="b" data-i="btn_choose">📁 Выбрать папку</button>
 <button id="sbtn" style="display:none;background:var(--soft);color:var(--ink);border:1px solid var(--line);font-size:14px;padding:10px 20px" data-i="btn_settings">⚙ Настройки</button>
+<div style="font-size:11px;color:var(--muted)">PixPort v${APP_VERSION}</div>
 </div>
 <div id="setOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:10">
 <div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left;max-height:calc(100vh - 48px);overflow:auto">
