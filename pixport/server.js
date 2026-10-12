@@ -345,6 +345,8 @@ function sendChunked(f, setPct) {
   // большие файлы — кусками: вкладка не давится, прогресс честный,
   // обрыв докачиваем с места (сервер помнит, сколько кусков уже лежит)
   const n = Math.ceil(f.size / CHUNKSZ);
+  const t0 = Date.now(); // старт для спидометра
+  const pctEl = document.getElementById('upPct');
   const rnd = new Uint8Array(16);
   crypto.getRandomValues(rnd);
   const cid = Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('');
@@ -354,7 +356,16 @@ function sendChunked(f, setPct) {
     x.setRequestHeader('Content-Type', 'application/octet-stream');
     x.timeout = 120000; // кусок дольше 2 минут — не ждём вечно, а ретраим (иначе вечный 0%)
     x.upload.onprogress = e => { // прогресс ВНУТРИ куска, а не только между кусками
-      if (e.lengthComputable) setPct(Math.round((idx + e.loaded / e.total) / n * 100));
+      if (!e.lengthComputable) return;
+      const doneBytes = idx * CHUNKSZ + e.loaded;
+      setPct(Math.round(doneBytes / f.size * 100));
+      const el = (Date.now() - t0) / 1000; // спидометр: «стоит» или «ползёт» — видно сразу
+      if (el > 1) {
+        const bps = doneBytes / el;
+        pctEl.textContent += ' · ' + (bps >= 1048576
+          ? (bps / 1048576).toFixed(1) + ' МБ/с'
+          : Math.round(bps / 1024) + ' КБ/с');
+      }
     };
     x.onload = () => {
       let j = null;
