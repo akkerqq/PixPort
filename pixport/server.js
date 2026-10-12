@@ -282,9 +282,10 @@ window.addEventListener('unhandledrejection', e => {
 });
 const MAXSIZE = ${maxBytes}; // потолок тарифа — отказ сразу, а не после 10 минут заливки
 const LIMSTR = ${JSON.stringify(limStr)};
-const CHUNKSZ = 1 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку).
-// Было 8 МБ, потом 2 МБ — Safari на больших блобах перестаёт слать события прогресса и встаёт.
-// Плюс роутерный NAT прибивает длинные соединения: короткие куски проскакивают чаще.
+const CHUNKSZ = 512 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку).
+// История размеров: 8 МБ → 2 МБ → 1 МБ → 512 КБ. Логика выживания на душных роутерах:
+// душилка бьёт по длинным соединениям — короткие куски проскакивают раньше, чем их успевают прибить,
+// а сторож с докачкой подбирает остальное. Накладные расходы на LAN незаметны.
 
 async function sendFiles(el) {
   const files = Array.from(el.files || []); // снимок СРАЗУ: дальше сбрасываем input, а сброс опустошает живой FileList
@@ -352,10 +353,10 @@ function sendChunked(f, setPct) {
   const pctEl = document.getElementById('upPct');
   let curB = 0, curP = 0, lastB = 0, lastT = Date.now(); // байты для спидометра
   let curXhr = null, lastProg = Date.now(); // сторож простоя
-  // нет прогресса 20 сек — текущий запрос мёртв: прибиваем, цикл ниже пошлёт кусок заново
+  // нет прогресса 15 сек — текущий запрос мёртв: прибиваем, цикл ниже пошлёт кусок заново
   // (сервер помнит принятые куски — докачка с места, а не сначала)
   const dog = setInterval(() => {
-    if (curXhr && Date.now() - lastProg > 20000) { try { curXhr.abort(); } catch (e) {} }
+    if (curXhr && Date.now() - lastProg > 15000) { try { curXhr.abort(); } catch (e) {} }
   }, 5000);
   const fmtSpd = bps => bps >= 1048576
     ? (bps / 1048576).toFixed(1) + ' МБ/с'
@@ -404,7 +405,7 @@ function sendChunked(f, setPct) {
     let idx = 0;
     while (idx < n) {
       let ok = false, lastErr = null;
-      for (let a = 0; a < 5 && !ok; a++) {
+      for (let a = 0; a < 6 && !ok; a++) {
         try {
           lastProg = Date.now(); // каждая попытка сама считается жизнью
           const r = await postOne(idx);
@@ -1107,7 +1108,7 @@ ru: {
   menu_added_short: '✓ Готово: правый клик по любой папке → Показать QR',
   menu_removed_short: 'Пункт убран',
   nofolder: 'Запусти PixPort с папкой:<br><code>node server.js "C:\\папка"</code>',
-  upHint: 'Фото сразу попадут в папку на компьютере. Встало на процентах — открой файл в галерее и дождись полной загрузки (кружок iCloud), потом отправь заново',
+  upHint: 'Фото сразу попадут в папку на компьютере. Встало на процентах — открой файл в галерее и дождись полной загрузки (кружок iCloud), потом отправь заново. Стоит подолгу — раздай точку доступа с телефона вместо роутера',
   btn_shoot: '📷 Снять фото', btn_gallery: '🖼 Выбрать из галереи',
   btn_file: '📁 Файл / видео',
   foot: 'PixPort · без проводов и мессенджеров',
@@ -1172,7 +1173,7 @@ en: {
   menu_added_short: '✓ Done: right-click any folder → Show QR',
   menu_removed_short: 'Menu item removed',
   nofolder: 'Start PixPort with a folder:<br><code>node server.js "C:\\folder"</code>',
-  upHint: 'Photos land straight in the PC folder. Stuck mid-way — open the file in gallery, wait for full download (iCloud circle), then retry',
+  upHint: 'Photos land straight in the PC folder. Stuck mid-way — open the file in gallery, wait for full download (iCloud circle), then retry. Stalls long — use phone hotspot instead of router',
   btn_shoot: '📷 Take a photo', btn_gallery: '🖼 Choose from gallery',
   btn_file: '📁 File / video',
   foot: 'PixPort · no cables, no messengers',
