@@ -352,6 +352,10 @@ function sendChunked(f, setPct) {
     const x = new XMLHttpRequest();
     x.open('POST', '/u?t=${token}&cid=' + cid + '&i=' + idx + '&n=' + n + '&name=' + encodeURIComponent(f.name));
     x.setRequestHeader('Content-Type', 'application/octet-stream');
+    x.timeout = 120000; // кусок дольше 2 минут — не ждём вечно, а ретраим (иначе вечный 0%)
+    x.upload.onprogress = e => { // прогресс ВНУТРИ куска, а не только между кусками
+      if (e.lengthComputable) setPct(Math.round((idx + e.loaded / e.total) / n * 100));
+    };
     x.onload = () => {
       let j = null;
       try { j = JSON.parse(x.responseText); } catch (e) {}
@@ -362,6 +366,7 @@ function sendChunked(f, setPct) {
       reject(new Error(msg));
     };
     x.onerror = () => reject(new Error('net'));
+    x.ontimeout = () => reject(new Error('timeout'));
     x.send(f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)));
   });
   return (async () => {
