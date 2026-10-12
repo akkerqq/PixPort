@@ -272,6 +272,14 @@ window.addEventListener('error', e => {
     st.textContent = 'Ошибка: ' + (e.message || e.error || e);
   } catch (_) {}
 });
+// async-падения идут мимо 'error' — ловим и их, иначе снова немая тишина
+window.addEventListener('unhandledrejection', e => {
+  try {
+    const st = document.getElementById('status');
+    st.className = 'show err';
+    st.textContent = 'Ошибка: ' + ((e.reason && e.reason.message) || e.reason || e);
+  } catch (_) {}
+});
 const MAXSIZE = ${maxBytes}; // потолок тарифа — отказ сразу, а не после 10 минут заливки
 const LIMSTR = ${JSON.stringify(limStr)};
 const CHUNKSZ = 8 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку)
@@ -372,7 +380,6 @@ function sendChunked(f, setPct) {
       setPct(Math.round(idx / n * 100));
     }
   })();
-}
 }
 // не даём экрану заснуть во время загрузки
 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});

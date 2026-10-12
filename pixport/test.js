@@ -119,6 +119,16 @@ function postForm(url, filename, buf) {
   check('чанки: вторая сессия открыта', !!token2);
   const up2 = await get(`${BASE}/u?t=${token2}`);
   check('предпроверка лимита и чанки на телефоне', up2.body.includes('const MAXSIZE') && up2.body.includes('sendChunked') && up2.body.includes('sendFiles'), up2.body.slice(0, 80));
+  // JS страницы телефона обязан парситься: немая смерть скрипта = «выбрал и тишина» (баг 12.10, лишний })
+  let jsOk = false, jsErr = '';
+  try {
+    const blocks = [...up2.body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x => x[1]);
+    const sendJs = blocks.find(s => s.includes('function sendFiles'));
+    if (!sendJs) throw new Error('блок отправки не найден');
+    new (require('vm').Script)(sendJs);
+    jsOk = true;
+  } catch (e) { jsErr = e.message; }
+  check('JS отправки без синтаксических ошибок', jsOk, jsErr);
   const half = Math.ceil(jpg.length / 2);
   const cid = 'abcdef0123456789';
   const c0 = await postChunk(token2, cid, 0, 2, 'IMG_CHUNK.jpg', jpg.subarray(0, half));
