@@ -263,6 +263,15 @@ syncThemeBtn();
 <script>
 let sending = false;
 let total = 0;
+// любая молчаливая JS-ошибка на странице — красным в статус, а не тишина:
+// иначе отладка превращается в гадание (кейс 12.10: выбор файла и ничего)
+window.addEventListener('error', e => {
+  try {
+    const st = document.getElementById('status');
+    st.className = 'show err';
+    st.textContent = 'Ошибка: ' + (e.message || e.error || e);
+  } catch (_) {}
+});
 const MAXSIZE = ${maxBytes}; // потолок тарифа — отказ сразу, а не после 10 минут заливки
 const LIMSTR = ${JSON.stringify(limStr)};
 const CHUNKSZ = 8 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку)
@@ -1789,7 +1798,8 @@ if (window.pixport) {
       return res.end('<p style="font-family:sans-serif;padding:40px">Ссылка устарела. Покажи QR на компьютере ещё раз.</p>');
     }
     if (req.method === 'POST') return handleUpload(req, res, q);
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    // no-store: телефон не должен подсовывать закэшированную страницу старой версии
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
     const lang = url.searchParams.get('lang') === 'en' ? 'en' : 'ru';
     return res.end(uploadPage(q, path.basename(s.folder), lang));
   }
