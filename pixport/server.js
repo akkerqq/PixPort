@@ -241,6 +241,10 @@ function uploadPage(token, folderName, lang) {
   <div id="status"></div>
   <div id="upWrap" style="display:none;width:100%;max-width:320px;background:var(--soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;height:10px"><div id="upBar" style="height:100%;width:0%;background:var(--brand);border-radius:999px"></div></div>
   <div id="upPct" style="display:none;font-size:12px;color:var(--muted)"></div>
+  <details id="ulog" style="display:none;width:100%;max-width:420px;margin-top:10px;font-size:11px;color:var(--muted);text-align:left">
+    <summary data-i="showLog" style="cursor:pointer">Лог отправки</summary>
+    <pre id="ulogPre" style="white-space:pre-wrap;word-break:break-all;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:6px;max-height:150px;overflow:auto"></pre>
+  </details>
   </div>
   <div class="foot" data-i="foot">PixPort · без проводов и мессенджеров</div>
 
@@ -263,6 +267,17 @@ syncThemeBtn();
 <script>
 let sending = false;
 let total = 0;
+// журнал отправки: что, когда и с каким итогом. При ошибке — главный источник диагноза
+// (11 сборок гадания показали: без замеров чинить нельзя). Виден в раскрывашке под статусом.
+const jlog = [];
+function j(msg) {
+  try {
+    jlog.push(new Date().toISOString().slice(11, 19) + ' ' + msg);
+    if (jlog.length > 40) jlog.shift();
+    document.getElementById('ulog').style.display = '';
+    document.getElementById('ulogPre').textContent = jlog.join('\n');
+  } catch (e) {}
+}
 // любая молчаливая JS-ошибка на странице — красным в статус, а не тишина:
 // иначе отладка превращается в гадание (кейс 12.10: выбор файла и ничего)
 window.addEventListener('error', e => {
@@ -302,21 +317,25 @@ async function sendFiles(el) {
     if (f.size > MAXSIZE) {
       st.className = 'show err';
       st.textContent = t('tooBig', { lim: LIMSTR });
+      j('SKIP ' + f.name + ' (' + f.size + ' Б > ' + LIMSTR + ')');
       wrap.style.display = 'none'; pct.style.display = 'none';
       continue;
     }
+    j('SEND ' + f.name + ' ' + f.size + ' Б');
     st.textContent = t('sending', { f: f.name });
     wrap.style.display = ''; pct.style.display = ''; setPct(0);
     try {
       if (f.size > CHUNKSZ) await sendChunked(f, setPct);
       else await sendSingle(f, setPct);
       total++;
+      j('DONE ' + f.name + ' (всего ' + total + ')');
       st.className = 'show';
       st.innerHTML = '<div class="count">' + t('sent', { n: total }) + '</div>';
       wrap.style.display = 'none'; pct.style.display = 'none';
     } catch (e) {
       st.className = 'show err';
       st.textContent = t('sendErr', { e: e.message });
+      j('FAIL ' + f.name + ': ' + e.message + ' — раскрой «Лог отправки» и пришли скрин');
       wrap.style.display = 'none'; pct.style.display = 'none';
       sending = false;
       return;
@@ -350,13 +369,14 @@ function sendChunked(f, setPct) {
   // большие файлы — кусками: вкладка не давится, прогресс честный,
   // обрыв докачиваем с места (сервер помнит, сколько кусков уже лежит)
   const n = Math.ceil(f.size / CHUNKSZ);
+  j('кусков: ' + n + ' по ' + Math.round(CHUNKSZ / 1024) + ' КБ');
   const pctEl = document.getElementById('upPct');
   let curB = 0, curP = 0, lastB = 0, lastT = Date.now(); // байты для спидометра
   let curXhr = null, lastProg = Date.now(); // сторож простоя
   // нет прогресса 15 сек — текущий запрос мёртв: прибиваем, цикл ниже пошлёт кусок заново
   // (сервер помнит принятые куски — докачка с места, а не сначала)
   const dog = setInterval(() => {
-    if (curXhr && Date.now() - lastProg > 15000) { try { curXhr.abort(); } catch (e) {} }
+    if (curXhr && Date.now() - lastProg > 15000) { j('сторож: 15с без прогресса, прибиваю и шлю заново'); try { curXhr.abort(); } catch (e) {} }
   }, 5000);
   const fmtSpd = bps => bps >= 1048576
     ? (bps / 1048576).toFixed(1) + ' МБ/с'
@@ -409,10 +429,10 @@ function sendChunked(f, setPct) {
         try {
           lastProg = Date.now(); // каждая попытка сама считается жизнью
           const r = await postOne(idx);
-          if (r && typeof r.catchUp === 'number') idx = r.catchUp; // сервер обогнал — догоняем
-          else idx++;
+          if (r && typeof r.catchUp === 'number') { j('ч' + idx + ': сервер обогнал, догоняю с ' + r.catchUp); idx = r.catchUp; }
+          else { idx++; j('ч' + (idx - 1) + ' ок (' + idx + '/' + n + ')'); }
           ok = true;
-        } catch (e) { lastErr = e; await new Promise(r2 => setTimeout(r2, 800 * (a + 1))); }
+        } catch (e) { lastErr = e; j('ч' + idx + ' попытка ' + (a + 1) + ': ' + e.message); await new Promise(r2 => setTimeout(r2, 800 * (a + 1))); }
       }
       if (!ok) throw lastErr;
       curP = Math.round(idx / n * 100);
@@ -1114,6 +1134,7 @@ ru: {
   foot: 'PixPort · без проводов и мессенджеров',
   sending: 'Отправляю {f}…', sent: '✓ {n} — отправлено в папку',
   sendErr: 'Ошибка: {e}. Попробуй ещё раз.',
+  showLog: 'Лог отправки',
   tooBig: 'Файл больше {lim} — выбери поменьше',
 },
 en: {
@@ -1179,6 +1200,7 @@ en: {
   foot: 'PixPort · no cables, no messengers',
   sending: 'Sending {f}…', sent: '✓ {n} sent to folder',
   sendErr: 'Error: {e}. Try again.',
+  showLog: 'Upload log',
   tooBig: 'File exceeds {lim} — pick a smaller one',
 }};
 
