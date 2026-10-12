@@ -330,6 +330,7 @@ function sendSingle(f, setPct) {
     fd.append('file', f, f.name);
     const x = new XMLHttpRequest();
     x.open('POST', '/u?t=${token}');
+    x.timeout = 120000;
     x.upload.onprogress = e => { if (e.lengthComputable) setPct(Math.round(e.loaded / e.total * 100)); };
     x.onload = () => {
       if (x.status >= 200 && x.status < 300) return resolve();
@@ -338,6 +339,7 @@ function sendSingle(f, setPct) {
       reject(new Error(msg));
     };
     x.onerror = () => reject(new Error('net'));
+    x.ontimeout = () => reject(new Error('timeout'));
     x.send(fd);
   });
 }
@@ -348,6 +350,12 @@ function sendChunked(f, setPct) {
   const n = Math.ceil(f.size / CHUNKSZ);
   const pctEl = document.getElementById('upPct');
   let curB = 0, curP = 0, lastB = 0, lastT = Date.now(); // байты для спидометра
+  let curXhr = null, lastProg = Date.now(); // сторож простоя
+  // нет прогресса 20 сек — текущий запрос мёртв: прибиваем, цикл ниже пошлёт кусок заново
+  // (сервер помнит принятые куски — докачка с места, а не сначала)
+  const dog = setInterval(() => {
+    if (curXhr && Date.now() - lastProg > 20000) { try { curXhr.abort(); } catch (e) {} }
+  }, 5000);
   const fmtSpd = bps => bps >= 1048576
     ? (bps / 1048576).toFixed(1) + ' МБ/с'
     : Math.round(bps / 1024) + ' КБ/с';
@@ -367,13 +375,16 @@ function sendChunked(f, setPct) {
     x.open('POST', '/u?t=${token}&cid=' + cid + '&i=' + idx + '&n=' + n + '&name=' + encodeURIComponent(f.name));
     x.setRequestHeader('Content-Type', 'application/octet-stream');
     x.timeout = 120000; // кусок дольше 2 минут — не ждём вечно, а ретраим (иначе вечный 0%)
+    curXhr = x; // сторож ниже может его прибить при простое
     x.upload.onprogress = e => { // прогресс ВНУТРИ куска, а не только между кусками
       if (!e.lengthComputable) return;
       curB = idx * CHUNKSZ + e.loaded;
       curP = Math.round(curB / f.size * 100);
+      lastProg = Date.now();
       setPct(curP);
     };
     x.onload = () => {
+      curXhr = null;
       let j = null;
       try { j = JSON.parse(x.responseText); } catch (e) {}
       if (x.status >= 200 && x.status < 300 && j && j.ok) return resolve(j);
@@ -382,8 +393,9 @@ function sendChunked(f, setPct) {
       if (j && j.error) msg = j.error;
       reject(new Error(msg));
     };
-    x.onerror = () => reject(new Error('net'));
-    x.ontimeout = () => reject(new Error('timeout'));
+    x.onerror = () => { curXhr = null; reject(new Error('net')); };
+    x.ontimeout = () => { curXhr = null; reject(new Error('timeout')); };
+    x.onabort = () => { curXhr = null; reject(new Error('retry')); }; // прибил сторож — не ошибка, а повтор
     x.send(f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)));
   });
   return (async () => {
@@ -391,8 +403,9 @@ function sendChunked(f, setPct) {
     let idx = 0;
     while (idx < n) {
       let ok = false, lastErr = null;
-      for (let a = 0; a < 3 && !ok; a++) {
+      for (let a = 0; a < 5 && !ok; a++) {
         try {
+          lastProg = Date.now(); // каждая попытка сама считается жизнью
           const r = await postOne(idx);
           if (r && typeof r.catchUp === 'number') idx = r.catchUp; // сервер обогнал — догоняем
           else idx++;
@@ -403,7 +416,7 @@ function sendChunked(f, setPct) {
       curP = Math.round(idx / n * 100);
       setPct(curP);
     }
-    } finally { clearInterval(spdTimer); }
+    } finally { clearInterval(spdTimer); clearInterval(dog); }
   })();
 }
 // не даём экрану заснуть во время загрузки
