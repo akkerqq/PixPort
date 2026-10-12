@@ -26,7 +26,7 @@ const { licenseState, activateKey, clearLicense, isPro } = require('./license');
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
-const APP_VERSION = '1.0.0'; // видна в окне — по ней проверяем, та ли сборка
+const APP_VERSION = '1.1.0'; // видна в окне — по ней проверяем, та ли сборка
 // GitHub-репозиторий релизов: проверка обновлений тянет
 // https://api.github.com/repos/<repo>/releases/latest (тег vX.Y.Z + Setup-*.exe).
 const UPDATE_REPO = 'akkerqq/PixPort';
@@ -134,6 +134,10 @@ function uploadPage(token, folderName, lang) {
   const title = escapeHtml(folderName);
   const initLang = lang === 'en' ? 'en' : 'ru';
   const plan = isPro() ? 'planPro' : 'planFree'; // статус рендерим сразу — телефон не ходит в /api/license (localhost)
+  const maxBytes = isPro() ? 10 * 1024 * 1024 * 1024 : 60 * 1024 * 1024; // предпроверка размера до заливки
+  const limStr = isPro()
+    ? (initLang === 'en' ? '10 GB' : '10 ГБ')
+    : (initLang === 'en' ? '60 MB' : '60 МБ');
   return `<!DOCTYPE html>
 <html lang="${initLang}">
 <head>
@@ -222,15 +226,15 @@ function uploadPage(token, folderName, lang) {
   <div class="btns">
     <label class="btn">
       <span data-i="btn_shoot">📷 Снять фото</span>
-      <input type="file" accept="image/*" capture="environment" multiple onchange="send(this.files)">
+      <input type="file" accept="image/*" capture="environment" multiple onchange="sendFiles(this)">
     </label>
     <label class="btn alt">
       <span data-i="btn_gallery">🖼 Выбрать из галереи</span>
-      <input type="file" accept="image/*" multiple onchange="send(this.files)">
+      <input type="file" accept="image/*" multiple onchange="sendFiles(this)">
     </label>
     ${isPro() ? `<label class="btn file">
       <span data-i="btn_file">📁 Файл / видео</span>
-      <input type="file" multiple onchange="send(this.files)">
+      <input type="file" multiple onchange="sendFiles(this)">
     </label>` : ''}
   </div>
 
@@ -259,8 +263,13 @@ syncThemeBtn();
 <script>
 let sending = false;
 let total = 0;
+const MAXSIZE = ${maxBytes}; // потолок тарифа — отказ сразу, а не после 10 минут заливки
+const LIMSTR = ${JSON.stringify(limStr)};
+const CHUNKSZ = 8 * 1024 * 1024; // куски под лимиты памяти вкладки iOS (баг №1: 700 МБ одним XHR давили вкладку)
 
-async function send(files) {
+async function sendFiles(el) {
+  const files = el.files;
+  el.value = ''; // сброс: повторный выбор того же файла снова сработает
   if (!files || !files.length || sending) return;
   sending = true;
   const st = document.getElementById('status');
@@ -270,20 +279,17 @@ async function send(files) {
   st.className = 'show';
   const setPct = p => { bar.style.width = p + '%'; pct.textContent = p + '%'; };
   for (const f of files) {
+    if (f.size > MAXSIZE) {
+      st.className = 'show err';
+      st.textContent = t('tooBig', { lim: LIMSTR });
+      wrap.style.display = 'none'; pct.style.display = 'none';
+      continue;
+    }
     st.textContent = t('sending', { f: f.name });
     wrap.style.display = ''; pct.style.display = ''; setPct(0);
     try {
-      // fetch процентов загрузки не даёт — шлём через XHR ради прогресса
-      await new Promise((resolve, reject) => {
-        const fd = new FormData();
-        fd.append('file', f, f.name);
-        const x = new XMLHttpRequest();
-        x.open('POST', '/u?t=${token}');
-        x.upload.onprogress = e => { if (e.lengthComputable) setPct(Math.round(e.loaded / e.total * 100)); };
-        x.onload = () => (x.status >= 200 && x.status < 300) ? resolve() : reject(new Error('HTTP ' + x.status));
-        x.onerror = () => reject(new Error('net'));
-        x.send(fd);
-      });
+      if (f.size > CHUNKSZ) await sendChunked(f, setPct);
+      else await sendSingle(f, setPct);
       total++;
       st.className = 'show';
       st.innerHTML = '<div class="count">' + t('sent', { n: total }) + '</div>';
@@ -297,6 +303,67 @@ async function send(files) {
     }
   }
   sending = false;
+}
+
+function sendSingle(f, setPct) {
+  // fetch процентов загрузки не даёт — шлём через XHR ради прогресса
+  return new Promise((resolve, reject) => {
+    const fd = new FormData();
+    fd.append('file', f, f.name);
+    const x = new XMLHttpRequest();
+    x.open('POST', '/u?t=${token}');
+    x.upload.onprogress = e => { if (e.lengthComputable) setPct(Math.round(e.loaded / e.total * 100)); };
+    x.onload = () => {
+      if (x.status >= 200 && x.status < 300) return resolve();
+      let msg = 'HTTP ' + x.status;
+      try { const j = JSON.parse(x.responseText); if (j && j.error) msg = j.error; } catch (e2) {}
+      reject(new Error(msg));
+    };
+    x.onerror = () => reject(new Error('net'));
+    x.send(fd);
+  });
+}
+
+function sendChunked(f, setPct) {
+  // большие файлы — кусками: вкладка не давится, прогресс честный,
+  // обрыв докачиваем с места (сервер помнит, сколько кусков уже лежит)
+  const n = Math.ceil(f.size / CHUNKSZ);
+  const rnd = new Uint8Array(16);
+  crypto.getRandomValues(rnd);
+  const cid = Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('');
+  const postOne = idx => new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('POST', '/u?t=${token}&cid=' + cid + '&i=' + idx + '&n=' + n + '&name=' + encodeURIComponent(f.name));
+    x.setRequestHeader('Content-Type', 'application/octet-stream');
+    x.onload = () => {
+      let j = null;
+      try { j = JSON.parse(x.responseText); } catch (e) {}
+      if (x.status >= 200 && x.status < 300 && j && j.ok) return resolve(j);
+      if (x.status === 409 && j && typeof j.wait === 'number') return resolve({ catchUp: j.wait });
+      let msg = 'HTTP ' + x.status;
+      if (j && j.error) msg = j.error;
+      reject(new Error(msg));
+    };
+    x.onerror = () => reject(new Error('net'));
+    x.send(f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)));
+  });
+  return (async () => {
+    let idx = 0;
+    while (idx < n) {
+      let ok = false, lastErr = null;
+      for (let a = 0; a < 3 && !ok; a++) {
+        try {
+          const r = await postOne(idx);
+          if (r && typeof r.catchUp === 'number') idx = r.catchUp; // сервер обогнал — догоняем
+          else idx++;
+          ok = true;
+        } catch (e) { lastErr = e; await new Promise(r2 => setTimeout(r2, 800 * (a + 1))); }
+      }
+      if (!ok) throw lastErr;
+      setPct(Math.round(idx / n * 100));
+    }
+  })();
+}
 }
 // не даём экрану заснуть во время загрузки
 if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
@@ -465,6 +532,7 @@ function qrPage(token, folder, net) {
   </div>
   <div class="card">
   <div class="folder">📷 ${escapeHtml(folder)}</div>
+  <div id="updBanner" onclick="updGo()" style="display:none;cursor:pointer;width:100%;background:var(--brand);color:#fff;font-size:14px;font-weight:700;padding:11px 16px;border-radius:12px;text-align:center"><span id="updBannerText"></span></div>
   ${netWarn}
   <div id="qr"><img id="qrimg" alt="QR"></div>
   <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
@@ -499,6 +567,13 @@ function qrPage(token, folder, net) {
         <button id="subBtn" onclick="subClick()" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
       </div>
       <div id="subMsg" style="font-size:13px;min-height:18px;margin-bottom:6px"></div>
+      <div id="subKeyShow" style="display:none;font-size:13px;margin-bottom:10px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px">
+        <div style="color:var(--muted);margin-bottom:6px" data-i="subKeySaved">Сохраните ключ — пригодится при переустановке:</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <code id="subKeyText" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--ink)"></code>
+          <button id="subCopy" onclick="subCopyKey()" style="font-size:12px;padding:7px 12px;flex:0 0 auto" data-i="copyBtn">Копировать</button>
+        </div>
+      </div>
       <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="updTitle">Обновления</div>
       <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="updStatus" data-i="updIdle">Нажми «Проверить» — сравним твою версию с GitHub.</div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -533,7 +608,7 @@ function qrPage(token, folder, net) {
       <h3 data-i="proTitle">PixPort Pro</h3>
       <ol>
         <li data-i-html="proB1"><b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.</li>
-        <li data-i-html="proB2"><b>Файлы и видео</b> до 2 ГБ — как есть, без пережатия.</li>
+        <li data-i-html="proB2"><b>Файлы и видео</b> до 10 ГБ — как есть, без пережатия.</li>
       </ol>
       <div style="margin-top:14px">
         <button id="proPayBtn" onclick="proPay()" data-i="proPay">Купить Pro</button>
@@ -592,13 +667,38 @@ async function autoSync() {
 }
 
 /* --- подписка --- */
+function showSavedKey(key) {
+  const box = document.getElementById('subKeyShow');
+  if (!box) return;
+  if (key) {
+    document.getElementById('subKeyText').textContent = key;
+    box.style.display = '';
+  } else {
+    box.style.display = 'none';
+  }
+}
+async function subCopyKey() {
+  const key = document.getElementById('subKeyText').textContent || '';
+  if (!key) return;
+  try { await navigator.clipboard.writeText(key); }
+  catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = key; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e2) {}
+    ta.remove();
+  }
+  const b = document.getElementById('subCopy');
+  const old = b.textContent;
+  b.textContent = t('copied');
+  setTimeout(() => { b.textContent = old; }, 1500);
+}
 async function loadSub() {
   try {
     const st = await (await fetch('/api/license?t=' + token)).json();
-    paintSub(!!st.pro);
+    paintSub(!!st.pro, st.key || null);
   } catch (e) {}
 }
-function paintSub(pro) {
+function paintSub(pro, key) {
   const desc = document.getElementById('subDesc');
   const row = document.getElementById('subRow');
   const btn = document.getElementById('subBtn');
@@ -610,6 +710,7 @@ function paintSub(pro) {
     row.style.display = 'none';
     btn.style.display = '';
   }
+  showSavedKey(pro ? (key || null) : null);
   paintPlan(pro); // бейдж у логотипа + кнопка «Перейти на PRO»
 }
 // бейдж FREE/PRO у логотипа и видимость кнопки перехода (перерендера нет — правим руками)
@@ -645,6 +746,7 @@ async function subClick() {
     btn.textContent = t('subBtn');
     document.getElementById('subDesc').dataset.i = 'subDescFree';
     document.getElementById('subDesc').textContent = t('subDescFree');
+    showSavedKey(null);
     paintPlan(false);
     return;
   }
@@ -660,7 +762,7 @@ async function subClick() {
     if (s.ok || s.pro) {
       msg.style.color = 'var(--ok)';
       msg.textContent = t('subOk');
-      paintSub(true);
+      paintSub(true, s.key || key);
     } else {
       msg.style.color = 'var(--err)';
       msg.textContent = t('subBad');
@@ -675,6 +777,18 @@ function closeSettings() { document.getElementById('settingsOverlay').classList.
 
 /* --- обновления с GitHub --- */
 let updUrl = '';
+function paintUpdBanner(ver) {
+  // заметная плашка прямо в окне (не только в настройках): тихо нашли — тихо показали
+  const b = document.getElementById('updBanner');
+  if (!b) return;
+  if (ver) {
+    document.getElementById('updBannerText').textContent = t('updBanner', { v: ver });
+    b.style.display = '';
+  } else {
+    b.style.display = 'none';
+  }
+  if (window.__fitSoon) window.__fitSoon();
+}
 async function updCheck(silent) {
   const st = document.getElementById('updStatus');
   const dl = document.getElementById('updDl');
@@ -687,9 +801,11 @@ async function updCheck(silent) {
       st.textContent = t('updAvailable', { v: r.latest });
       updUrl = r.url || '';
       dl.style.display = '';
+      paintUpdBanner(r.latest);
     } else {
       st.textContent = t('updLatest', { v: r.current });
       dl.style.display = 'none';
+      paintUpdBanner(null);
     }
   } catch (e) { if (!silent) st.textContent = t('updFail'); }
   btn.disabled = false;
@@ -882,6 +998,7 @@ ru: {
   subPlaceholder: 'PP-XXXXXX-XXXXXX-XXXXXX',
   subBtn: 'Активировать', subBtnOff: 'Отключить Pro',
   subOk: '✓ Pro активировано', subBad: 'Ключ не подходит', subOff: 'Возвращено в бесплатный режим',
+  subKeySaved: 'Сохраните ключ — пригодится при переустановке:', copyBtn: 'Копировать', copied: 'Скопировано',
   planFree: 'Бесплатно · 960px', planPro: 'Pro · оригинал',
   autoStart: 'Запускаться вместе с Windows',
   updTitle: 'Обновления',
@@ -889,12 +1006,13 @@ ru: {
   updCheck: 'Проверить', updDl: 'Скачать',
   updLatest: 'У тебя последняя версия ({v})',
   updAvailable: 'Вышла {v} — жми «Скачать»',
+  updBanner: 'Доступна {v} — нажми, чтобы скачать',
   updFail: 'Не удалось проверить (нет сети?)',
   updEmpty: 'Релизов пока нет — загляни позже',
   goPro: 'Перейти на PRO',
   proTitle: 'PixPort Pro',
   proB1: '<b>Оригинальное качество</b> фото — без потолка 960 px и сжатия.',
-  proB2: '<b>Файлы и видео</b> до 2 ГБ — как есть, без пережатия.',
+  proB2: '<b>Файлы и видео</b> до 10 ГБ — как есть, без пережатия.',
   proPay: 'Купить Pro',
   proSoon: 'Продажи скоро откроются. А ключ уже можно ввести в ⚙ Настройках.',  netTitle: 'Подключение телефона',
   netDesc: 'Если сетей несколько и телефон не грузит — выбери другой адрес, QR перегенерируется.',
@@ -922,6 +1040,7 @@ ru: {
   foot: 'PixPort · без проводов и мессенджеров',
   sending: 'Отправляю {f}…', sent: '✓ {n} — отправлено в папку',
   sendErr: 'Ошибка: {e}. Попробуй ещё раз.',
+  tooBig: 'Файл больше {lim} — выбери поменьше',
 },
 en: {
   status_wait: 'Waiting for phone…',
@@ -942,6 +1061,7 @@ en: {
   subPlaceholder: 'PP-XXXXXX-XXXXXX-XXXXXX',
   subBtn: 'Activate', subBtnOff: 'Turn off Pro',
   subOk: '✓ Pro activated', subBad: 'Key not valid', subOff: 'Back to free mode',
+  subKeySaved: 'Save your key — you’ll need it after reinstall:', copyBtn: 'Copy', copied: 'Copied',
   planFree: 'Free · 960px', planPro: 'Pro · original',
   autoStart: 'Start with Windows',
   updTitle: 'Updates',
@@ -949,12 +1069,13 @@ en: {
   updCheck: 'Check', updDl: 'Download',
   updLatest: 'You are up to date ({v})',
   updAvailable: '{v} is out — hit “Download”',
+  updBanner: '{v} is out — tap to download',
   updFail: 'Could not check (offline?)',
   updEmpty: 'No releases yet — check back later',
   goPro: 'Get PRO',
   proTitle: 'PixPort Pro',
   proB1: '<b>Original quality</b> photos — no 960 px cap, no extra compression.',
-  proB2: '<b>Files & video</b> up to 2 GB — as is, no recompression.',
+  proB2: '<b>Files & video</b> up to 10 GB — as is, no recompression.',
   proPay: 'Buy Pro',
   proSoon: 'Sales opening soon. You can already enter a key in ⚙ Settings.',
   netTitle: 'Phone connection',
@@ -983,6 +1104,7 @@ en: {
   foot: 'PixPort · no cables, no messengers',
   sending: 'Sending {f}…', sent: '✓ {n} sent to folder',
   sendErr: 'Error: {e}. Try again.',
+  tooBig: 'File exceeds {lim} — pick a smaller one',
 }};
 
 // Общий клиентский код языка. Сервер вставляет window.__INIT_LANG до него.
@@ -1056,18 +1178,133 @@ function json(res, code, obj) {
   res.end(b);
 }
 
+/* --- чанковая загрузка больших файлов (баг №1: вкладка iOS давится,
+ * когда 700 МБ летят одним XHR — FormData держит всё в памяти + копия).
+ * Телефон режет файл на куски по 8 МБ: POST /u?t=..&cid=..&i=..&n=..&name=..
+ * с телом application/octet-stream. Куски дописываются в tmp, последний
+ * уходит в общий финал finishUpload — как обычный аплоад. */
+const CHUNK_MAX = 32 * 1024 * 1024; // кусок больше — не кусок, а атака
+const uploads = new Map(); // cid -> { tmp, name, n, got, size, ts, pro }
+
+function sweepUploads() {
+  const now = Date.now();
+  for (const [cid, u] of uploads) {
+    if (now - u.ts > 2 * 3600 * 1000) {
+      try { fs.rmSync(u.tmp, { force: true }); } catch (e) {}
+      uploads.delete(cid);
+    }
+  }
+}
+
+/* Общий финал заливки: tmp + исходное имя -> папка. Владеет tmp (удаляет,
+ * кроме случая moveFile — там tmp уже переехал). Возвращает { saved } / { failed }. */
+async function finishUpload(s, tmp, orig) {
+  const pro = isPro();
+  const ext = path.extname(orig || 'photo.jpg').toLowerCase();
+  const drop = () => { try { fs.rmSync(tmp, { force: true }); } catch (e) {} };
+  try {
+    if (pro && !isImageExt(ext)) {
+      // Pro и не картинка (видео, документ) — кладём как есть, без пережатия
+      const fname = uniqueName(s.folder, ext || '.bin');
+      moveFile(tmp, path.join(s.folder, fname));
+      s.received++;
+      s.files.push(fname);
+      console.log(`[OK, файл] ${path.join(s.folder, fname)}`);
+      return { saved: fname }; // tmp уже переехал — чистить нечего
+    }
+    // Картинка: поворачиваем по EXIF и кодируем в JPG.
+    // Free — потолок 960px и quality 70 (на большом экране мылит —
+    // за оригиналом в Pro); Pro — оригинал, quality 92.
+    // Сжатие происходит здесь, на ПК, поэтому телефон и браузер
+    // ничего обойти не могут.
+    let img = sharp(tmp).rotate();
+    if (!pro) {
+      img = img.resize({ width: 960, height: 960, fit: 'inside', withoutEnlargement: true });
+    }
+    const fname = uniqueName(s.folder, '.jpg');
+    await img.jpeg({ quality: pro ? 92 : 70, mozjpeg: true }).toFile(path.join(s.folder, fname));
+    s.received++;
+    s.files.push(fname);
+    console.log(`[OK] ${path.join(s.folder, fname)}`);
+    drop();
+    return { saved: fname };
+  } catch (e) {
+    // Не картинка, хотя притворялась расширением:
+    // Pro — кладём как есть, free — вежливый отказ (иначе видео пролезет бесплатно).
+    if (pro) {
+      try {
+        const fname = uniqueName(s.folder, ext || '.bin');
+        moveFile(tmp, path.join(s.folder, fname));
+        s.received++;
+        s.files.push(fname);
+        console.log(`[OK, оригинал] ${fname} (${e.message})`);
+        return { saved: fname };
+      } catch (e2) { drop(); return { failed: e2.message }; }
+    }
+    drop();
+    return { failed: 'В бесплатной версии — только фото' };
+  }
+}
+
+async function handleChunk(req, res, token, p) {
+  const s = sessions.get(token);
+  if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
+  if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
+  const cid = p.get('cid') || '';
+  const i = parseInt(p.get('i'), 10), n = parseInt(p.get('n'), 10);
+  if (!/^[0-9a-f]{16,64}$/i.test(cid) || !(i >= 0) || !(n > 0) || i >= n || n > 2048)
+    return json(res, 400, { ok: false, error: 'Плохой кусок' });
+  const pro = isPro();
+  const maxSize = pro ? 10 * 1024 * 1024 * 1024 : 60 * 1024 * 1024;
+  let body;
+  try { body = await readBody(req, CHUNK_MAX); }
+  catch (e) { return json(res, 500, { ok: false, error: 'Кусок больше 32 МБ' }); }
+  sweepUploads();
+  let u = uploads.get(cid);
+  if (!u) {
+    if (i !== 0) return json(res, 400, { ok: false, error: 'Начни с нулевого куска' });
+    const name = (path.basename(p.get('name') || 'photo.jpg').slice(0, 120) || 'photo.jpg');
+    const tmp = path.join(os.tmpdir(), `pixport-c-${Date.now()}-${cid.slice(0, 12)}.part`);
+    fs.writeFileSync(tmp, Buffer.alloc(0));
+    u = { tmp, name, n, got: 0, size: 0, ts: Date.now(), pro };
+    uploads.set(cid, u);
+  }
+  if (i < u.got) return json(res, 200, { ok: true, chunk: i }); // дубль (ретрай после обрыва ответа) — уже лежит
+  if (i !== u.got || n !== u.n) return json(res, 409, { ok: false, error: 'Порядок кусков', wait: u.got });
+  u.ts = Date.now();
+  fs.appendFileSync(u.tmp, body);
+  u.got++; u.size += body.length;
+  if (u.size > maxSize) {
+    try { fs.rmSync(u.tmp, { force: true }); } catch (e) {}
+    uploads.delete(cid);
+    return json(res, 500, { ok: false, error: u.pro ? 'Файл больше 10 ГБ' : 'Файл больше 60 МБ' });
+  }
+  if (u.got < u.n) return json(res, 200, { ok: true, chunk: i });
+  uploads.delete(cid);
+  const r = await finishUpload(s, u.tmp, u.name);
+  if (r.saved) return json(res, 200, { ok: true, file: r.saved, total: s.received });
+  return json(res, 500, { ok: false, error: r.failed });
+}
+
 async function handleUpload(req, res, token) {
   const s = sessions.get(token);
   if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
   if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
 
+  // чанки больших файлов — мимо multipart (см. handleChunk)
+  try {
+    const u = new URL(req.url, 'http://x');
+    if (u.searchParams.get('cid')) return handleChunk(req, res, token, u.searchParams);
+  } catch (e) {}
+
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) return json(res, 400, { ok: false, error: 'Нет файла' });
 
-  // Лимиты: free — фото до 60 МБ, Pro — файлы/видео до 2 ГБ.
+  // Лимиты: free — фото до 60 МБ, Pro — файлы/видео до 10 ГБ.
   // Пишем потоком во временный файл — большие видео не висят в памяти.
+  // Большие файлы идут чанками (см. handleChunk) — вкладка телефона не давится.
   const pro = isPro();
-  const maxSize = pro ? 2 * 1024 * 1024 * 1024 : 60 * 1024 * 1024;
+  const maxSize = pro ? 10 * 1024 * 1024 * 1024 : 60 * 1024 * 1024;
   const bb = Busboy({ headers: req.headers, limits: { files: 1, fileSize: maxSize } });
   let saved = null;
   let failed = null;
@@ -1076,57 +1313,13 @@ async function handleUpload(req, res, token) {
   bb.on('file', (name, stream, info) => {
     const tmp = path.join(os.tmpdir(), `pixport-${Date.now()}-${Math.random().toString(16).slice(2)}.part`);
     const out = fs.createWriteStream(tmp);
-    stream.on('limit', () => { failed = pro ? 'Файл больше 2 ГБ' : 'Файл больше 60 МБ'; });
+    stream.on('limit', () => { failed = pro ? 'Файл больше 10 ГБ' : 'Файл больше 60 МБ'; });
     stream.pipe(out);
     pending = new Promise(resolve => out.on('finish', async () => {
-      const done = () => { try { fs.rmSync(tmp, { force: true }); } catch (e) {} resolve(); };
-      if (failed) return done();
-      const orig = info.filename || 'photo.jpg';
-      const ext = path.extname(orig).toLowerCase();
-      try {
-        if (pro && !isImageExt(ext)) {
-          // Pro и не картинка (видео, документ) — кладём как есть, без пережатия
-          const fname = uniqueName(s.folder, ext || '.bin');
-          moveFile(tmp, path.join(s.folder, fname));
-          saved = fname;
-          s.received++;
-          s.files.push(fname);
-          console.log(`[OK, файл] ${path.join(s.folder, fname)}`);
-          return resolve(); // tmp уже переехал — чистить нечего
-        }
-        // Картинка: поворачиваем по EXIF и кодируем в JPG.
-        // Free — потолок 960px и quality 70 (на большом экране мылит —
-        // за оригиналом в Pro); Pro — оригинал, quality 92.
-        // Сжатие происходит здесь, на ПК, поэтому телефон и браузер
-        // ничего обойти не могут.
-        let img = sharp(tmp).rotate();
-        if (!pro) {
-          img = img.resize({ width: 960, height: 960, fit: 'inside', withoutEnlargement: true });
-        }
-        const fname = uniqueName(s.folder, '.jpg');
-        await img.jpeg({ quality: pro ? 92 : 70, mozjpeg: true }).toFile(path.join(s.folder, fname));
-        saved = fname;
-        s.received++;
-        s.files.push(fname);
-        console.log(`[OK] ${path.join(s.folder, fname)}`);
-      } catch (e) {
-        // Не картинка, хотя притворялась расширением:
-        // Pro — кладём как есть, free — вежливый отказ (иначе видео пролезет бесплатно).
-        if (pro) {
-          try {
-            const fname = uniqueName(s.folder, ext || '.bin');
-            moveFile(tmp, path.join(s.folder, fname));
-            saved = fname;
-            s.received++;
-            s.files.push(fname);
-            console.log(`[OK, оригинал] ${fname} (${e.message})`);
-            return resolve();
-          } catch (e2) { failed = e2.message; }
-        } else {
-          failed = 'В бесплатной версии — только фото';
-        }
-      }
-      done();
+      if (failed) { try { fs.rmSync(tmp, { force: true }); } catch (e) {} return resolve(); }
+      const r = await finishUpload(s, tmp, info.filename || 'photo.jpg');
+      if (r.saved) saved = r.saved; else failed = r.failed;
+      resolve();
     }));
     out.on('error', () => { failed = 'Ошибка записи'; });
   });
@@ -1275,7 +1468,7 @@ async function handleRequest(req, res) {
     /* --- подписка: статус и активация ключа --- */
     if (url.pathname === '/api/license' && req.method === 'GET') {
       const st = licenseState();
-      return json(res, 200, { ok: true, pro: st.pro });
+      return json(res, 200, { ok: true, pro: st.pro, key: st.key || null });
     }
     if (url.pathname === '/api/license' && req.method === 'POST') {
       const body = await readBody(req, 4 * 1024).catch(() => Buffer.alloc(0));
@@ -1338,6 +1531,13 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <button id="subBtn" style="font-size:13px;padding:9px 16px" data-i="subBtn">Активировать</button>
 </div>
 <div id="subMsg" style="font-size:13px;min-height:18px;margin-bottom:6px"></div>
+<div id="subKeyShow" style="display:none;font-size:13px;margin-bottom:10px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px">
+<div style="color:var(--muted);margin-bottom:6px" data-i="subKeySaved">Сохраните ключ — пригодится при переустановке:</div>
+<div style="display:flex;gap:8px;align-items:center">
+<code id="subKeyText" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:12px;color:var(--ink)"></code>
+<button id="subCopy" style="font-size:12px;padding:7px 12px;flex:0 0 auto" data-i="copyBtn">Копировать</button>
+</div>
+</div>
 <div style="font-size:14px;font-weight:700;margin-bottom:8px" data-i="updTitle">Обновления</div>
 <div style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px" id="updStatus" data-i="updIdle">Нажми «Проверить» — сравним твою версию с GitHub.</div>
 <div style="display:flex;gap:8px;margin-bottom:14px">
@@ -1414,13 +1614,38 @@ if (window.pixport) {
   // --- подписка ---
   const subBtn = document.getElementById('subBtn');
   const subMsg = document.getElementById('subMsg');
+  function showSavedKey2(key) {
+    const box = document.getElementById('subKeyShow');
+    if (!box) return;
+    if (key) {
+      document.getElementById('subKeyText').textContent = key;
+      box.style.display = '';
+    } else {
+      box.style.display = 'none';
+    }
+  }
+  document.getElementById('subCopy').onclick = async () => {
+    const key = document.getElementById('subKeyText').textContent || '';
+    if (!key) return;
+    try { await navigator.clipboard.writeText(key); }
+    catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = key; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (e2) {}
+      ta.remove();
+    }
+    const b = document.getElementById('subCopy');
+    const old = b.textContent;
+    b.textContent = t('copied');
+    setTimeout(() => { b.textContent = old; }, 1500);
+  };
   async function subSync() {
     try {
       const st = await (await fetch('/api/license')).json();
-      paintSub(!!st.pro);
+      paintSub(!!st.pro, st.key || null);
     } catch (e) {}
   }
-  function paintSub(pro) {
+  function paintSub(pro, key) {
     const desc = document.getElementById('subDesc');
     desc.dataset.i = pro ? 'subDescPro' : 'subDescFree';
     desc.textContent = t(desc.dataset.i);
@@ -1428,6 +1653,7 @@ if (window.pixport) {
     subBtn.dataset.on = pro ? '1' : '';
     subBtn.dataset.i = pro ? 'subBtnOff' : 'subBtn'; // data-i, а не голый текст — иначе смена языка сотрёт состояние
     subBtn.textContent = t(subBtn.dataset.i);
+    showSavedKey2(pro ? (key || null) : null);
     const pb = document.getElementById('planBadgeTop'); // бейдж у логотипа
     if (pb) { pb.textContent = pro ? 'PRO' : 'FREE'; pb.className = pro ? 'pro' : 'free'; }
   }
@@ -1437,17 +1663,18 @@ if (window.pixport) {
       await fetch('/api/license/off', { method: 'POST' });
       subMsg.style.color = 'var(--muted)';
       subMsg.textContent = t('subOff');
-      paintSub(false);
+      paintSub(false, null);
       return;
     }
     subBtn.disabled = true;
     try {
+      const typed = document.getElementById('subKey').value.trim();
       const r = await fetch('/api/license', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: document.getElementById('subKey').value.trim() })
+        body: JSON.stringify({ key: typed })
       });
       const s = await r.json();
-      if (s.ok || s.pro) { subMsg.style.color = 'var(--ok)'; subMsg.textContent = t('subOk'); paintSub(true); }
+      if (s.ok || s.pro) { subMsg.style.color = 'var(--ok)'; subMsg.textContent = t('subOk'); paintSub(true, s.key || typed); }
       else { subMsg.style.color = 'var(--err)'; subMsg.textContent = t('subBad'); }
     } catch (e) { subMsg.style.color = 'var(--err)'; subMsg.textContent = t('subBad'); }
     subBtn.disabled = false;

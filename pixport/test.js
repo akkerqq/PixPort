@@ -17,6 +17,22 @@ function get(url) {
   });
 }
 
+function postChunk(token, cid, i, n, filename, buf) {
+  return new Promise((res, rej) => {
+    const req = http.request({
+      hostname: '127.0.0.1', port: 8765, method: 'POST',
+      path: `/u?t=${token}&cid=${cid}&i=${i}&n=${n}&name=${encodeURIComponent(filename)}`,
+      headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': buf.length }
+    }, r => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => res({ code: r.statusCode, body: d }));
+    });
+    req.on('error', rej);
+    req.end(buf);
+  });
+}
+
 function postForm(url, filename, buf) {
   const boundary = '----pixport' + Math.random().toString(16).slice(2);
   const head = Buffer.from(
@@ -96,6 +112,23 @@ function postForm(url, filename, buf) {
   // 8. мусорный токен
   const fake = await get(`${BASE}/api/qr?t=chemtebe`);
   check('чужой токен — 404', fake.code === 404);
+
+  // 9. чанковая загрузка (баг №1: большие видео кусками, а не одним XHR)
+  const page2 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const token2 = (page2.body.match(/const token = '([^']+)'/) || [])[1];
+  check('чанки: вторая сессия открыта', !!token2);
+  const up2 = await get(`${BASE}/u?t=${token2}`);
+  check('предпроверка лимита и чанки на телефоне', up2.body.includes('const MAXSIZE') && up2.body.includes('sendChunked') && up2.body.includes('sendFiles'), up2.body.slice(0, 80));
+  const half = Math.ceil(jpg.length / 2);
+  const cid = 'abcdef0123456789';
+  const c0 = await postChunk(token2, cid, 0, 2, 'IMG_CHUNK.jpg', jpg.subarray(0, half));
+  check('чанк 0 принят', c0.code === 200 && JSON.parse(c0.body).ok, c0.body);
+  const cdup = await postChunk(token2, cid, 0, 2, 'IMG_CHUNK.jpg', jpg.subarray(0, half));
+  check('дубль чанка — тоже ок (ретрай)', cdup.code === 200 && JSON.parse(cdup.body).ok, cdup.body);
+  const c1 = await postChunk(token2, cid, 1, 2, 'IMG_CHUNK.jpg', jpg.subarray(half));
+  check('чанк 1 склеен в файл', c1.code === 200 && JSON.parse(c1.body).ok, c1.body);
+  const cbad = await postChunk(token2, 'zzz', 0, 2, 'x.jpg', jpg.subarray(0, half));
+  check('кривой cid отклонён', cbad.code === 400, cbad.body);
 
   console.log('\nПРОЙДЕНО:');
   ok.forEach(o => console.log('  ✓ ' + o));
