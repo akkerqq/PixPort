@@ -1344,9 +1344,9 @@ async function finishUpload(s, tmp, orig) {
 }
 
 async function handleChunk(req, res, token, p) {
-  // каждое соединение закрываем: роутерный NAT любит прибивать переиспользуемые
-  // keep-alive между кусками — тогда встаёт всё со второго запроса (баг 12.10)
-  res.setHeader('Connection', 'close');
+  // Соединения НЕ рвём: keep-alive переиспользует один сокет на все куски.
+  // Было наоборот (Connection: close) — роутерные DoS-фильтры резали частые
+  // новые соединения как флуд: первый кусок проходил, остальные висли (баг 12.10, регрессия 1.1.0).
   const s = sessions.get(token);
   if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
   if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
@@ -1396,7 +1396,6 @@ async function handleUpload(req, res, token) {
     const u = new URL(req.url, 'http://x');
     if (u.searchParams.get('cid')) return handleChunk(req, res, token, u.searchParams);
   } catch (e) {}
-  res.setHeader('Connection', 'close'); // то же, что в чанках: свежее соединение на каждую заливку
 
   const contentType = req.headers['content-type'] || '';
   if (!contentType.includes('multipart/form-data')) return json(res, 400, { ok: false, error: 'Нет файла' });
