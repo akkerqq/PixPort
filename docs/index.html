@@ -78,11 +78,15 @@ footer a{color:var(--muted);margin-right:16px}
 <section id="buy">
 <h2>Купить Pro — 690 ₽ навсегда</h2>
 <div class="steps">
-<div class="step"><b>1. Напишите в поддержку</b>Telegram <a href="https://t.me/akka_manager"><b>@akka_manager</b></a> — скажите, что нужен ключ Pro.</div>
-<div class="step"><b>2. Оплатите</b>Поддержка подскажет удобный способ оплаты (СБП, карта, крипта).</div>
-<div class="step"><b>3. Получите ключ</b>Ключ придёт в переписку — введите его в программе: ⚙ Настройки → Подписка.</div>
+<div class="step"><b>1. Выберите способ оплаты</b>Нажмите на доступный метод ниже.</div>
+<div class="step"><b>2. Оплатите</b>После подключения эквайринга оплата пройдёт прямо здесь, на сайте.</div>
+<div class="step"><b>3. Получите ключ</b>Ключ Pro придёт вам — введите его в программе: ⚙ Настройки → Подписка.</div>
 </div>
-<p style="margin-top:16px;text-align:center"><a class="btn gold" href="https://t.me/akka_manager">Написать в поддержку</a></p>
+<div style="margin-top:16px">
+<p style="font-weight:700;margin:0 0 8px">Способ оплаты:</p>
+<button id="sbpBtn" class="btn gold" style="border:0;cursor:pointer" onclick="document.getElementById('sbpSoon').style.display='block';this.disabled=true">СБП</button>
+<p id="sbpSoon" style="display:none;margin-top:12px" class="note">Оплата через СБП будет скоро доступна. Пока что ключ Pro оформляется через <a href="#support">поддержку</a>.</p>
+</div>
 </section>
 
 <section id="download">
