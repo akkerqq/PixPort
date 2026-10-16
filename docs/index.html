@@ -81,16 +81,16 @@ footer a{color:var(--muted);margin-right:16px}
 <tr><td>Цена</td><td class="price">0 ₽</td><td class="price">690 ₽ <span class="note">разовый платёж, навсегда</span></td></tr>
 </table>
 <p><a class="btn gold" href="#buy" onclick="openPay(event)">Купить Pro — 690 ₽</a></p>
-<p>Оформление через поддержку: напишите в Telegram, оплатите удобным способом и получите ключ Pro — он вводится в программе: ⚙ Настройки → Подписка. Онлайн-оплата картой и СБП появится на сайте после подключения эквайринга.</p>
+<p>Для покупки укажите почту (сюда придёт ключ) и код из приложения (⚙ Настройки → Подписка — ключ привязывается к нему). Онлайн-оплата картой и СБП появится на сайте после подключения эквайринга.</p>
 <p class="note">Возврат — в течение 14 дней с момента оплаты по обращению в поддержку. Подробнее: <a href="terms.html">Пользовательское соглашение</a>.</p>
 </section>
 
 <section id="buy">
 <h2>Купить Pro — 690 ₽ навсегда</h2>
 <div class="steps">
-<div class="step"><b>1. Выберите способ оплаты</b>Нажмите на доступный метод ниже.</div>
-<div class="step"><b>2. Оплатите</b>После подключения эквайринга оплата пройдёт прямо здесь, на сайте.</div>
-<div class="step"><b>3. Получите ключ</b>Ключ Pro придёт вам — введите его в программе: ⚙ Настройки → Подписка.</div>
+<div class="step"><b>1. Почта и код</b>В окне покупки укажите почту для ключа и код из приложения (⚙ Настройки → Подписка) — оба поля обязательны.</div>
+<div class="step"><b>2. Способ оплаты</b>Выберите СБП или карту. Оплата пройдёт прямо здесь, на сайте.</div>
+<div class="step"><b>3. Получите ключ</b>Именной ключ под ваш код ПК придёт на указанную почту — введите его в программе.</div>
 </div>
 <div style="margin-top:16px">
 <p style="font-weight:700;margin:0 0 8px">Способ оплаты — на выбор в окне покупки:</p>
@@ -119,17 +119,35 @@ footer a{color:var(--muted);margin-right:16px}
 <div class="paymodal" id="payModal" onclick="if(event.target===this)closePay()">
 <div class="paybox">
 <h3>Оплата Pro — 690 ₽</h3>
-<p class="sub">Разовый платёж, ключ навсегда. Выберите способ:</p>
+<p class="sub">Разовый платёж, ключ навсегда.</p>
+<p style="font-weight:700;margin:0 0 6px;font-size:15px">1. Почта для ключа <span style="color:#c00">*</span></p>
+<input id="payEmail" type="email" placeholder="you@example.com" style="width:100%;font-size:15px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);margin-bottom:10px">
+<p style="font-weight:700;margin:0 0 6px;font-size:15px">2. Код из приложения <span style="color:#c00">*</span></p>
+<input id="payCode" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%;font-size:15px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);margin-bottom:4px;font-family:ui-monospace,monospace">
+<p class="note" style="margin:0 0 12px">Код — в программе: ⚙ Настройки → Подписка. Ключ привязывается к нему.</p>
+<p style="font-weight:700;margin:0 0 8px;font-size:15px">3. Способ оплаты</p>
 <button class="payopt" onclick="paySoon('sbp')">💳 СБП<small>QR или приложение банка</small></button>
 <button class="payopt" onclick="paySoon('card')">💷 Банковская карта<small>Visa, МИР и другие</small></button>
-<p class="paystatus" id="paySoon">Оплата этим способом будет скоро доступна.</p>
+<p class="paystatus" id="paySoon"></p>
 <button class="payclose" onclick="closePay()">Закрыть</button>
 </div>
 </div>
 <script>
 function openPay(e){if(e)e.preventDefault();document.getElementById('payModal').classList.add('open')}
 function closePay(){document.getElementById('payModal').classList.remove('open')}
-function paySoon(){document.getElementById('paySoon').style.display='block'}
+function payValid(){
+  var em=document.getElementById('payEmail'), cd=document.getElementById('payCode'), ok=true;
+  var emOk=/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((em.value||'').trim());
+  var cdOk=(cd.value||'').trim().length>=8;
+  em.style.borderColor=emOk?'var(--line)':'#c00'; if(!emOk)ok=false;
+  cd.style.borderColor=cdOk?'var(--line)':'#c00'; if(!cdOk)ok=false;
+  return ok?{email:em.value.trim(),code:cd.value.trim()}:null;
+}
+function paySoon(){
+  var v=payValid(), st=document.getElementById('paySoon');
+  if(!v){st.style.display='block';st.textContent='Заполните почту и код из приложения — без них ключ не выдать.';return;}
+  st.style.display='block';st.textContent='Оплата этим способом будет скоро доступна. Ключ придёт на '+v.email+'.';
+}
 </script>
 </body>
 </html>
