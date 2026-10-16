@@ -81,10 +81,33 @@ function postForm(url, filename, buf) {
   });
 }
 
+function postJson(url, obj) {
+  const body = Buffer.from(JSON.stringify(obj || {}));
+  return new Promise((res, rej) => {
+    const u = new URL(url);
+    const req = http.request({
+      hostname: u.hostname, port: u.port, path: u.pathname + u.search, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': body.length }
+    }, r => {
+      let d = '';
+      r.on('data', c => d += c);
+      r.on('end', () => res({ code: r.statusCode, body: d }));
+    });
+    req.on('error', rej);
+    req.end(body);
+  });
+}
+
 (async () => {
   const ok = [];
   const bad = [];
   const check = (name, cond, extra = '') => (cond ? ok : bad).push(name + (extra ? ' → ' + extra : ''));
+
+  // 0. окно выбора папки (до создания сессий): патчноут «что нового»
+  const pick0 = await get(`${BASE}/`);
+  check('что нового: окно + текст версии', pick0.body.includes('id="wnOverlay"') && pick0.body.includes('pixport-wn-seen') && pick0.body.includes('Чат сессии'), 'патчноута нет');
+  const wimg = await get(`${BASE}/assets/whatsnew.png`);
+  check('что нового: баннер отдаётся', wimg.code === 200 && (wimg.headers['content-type'] || '').includes('image/png'), wimg.code + '');
 
   // 1. открыть окно QR
   const page = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
@@ -176,6 +199,95 @@ function postForm(url, filename, buf) {
   check('multipart-кусок 1 склеен в файл', m1.code === 200 && JSON.parse(m1.body).ok, m1.body);
   const mno = await postChunkMulti(token3, { i: 0, n: 1, name: 'x.jpg' }, 'chunk', jpg.subarray(0, 100));
   check('multipart без cid — обычное фото (мусор отклонён как фото)', mno.code === 500 && mno.body.includes('только фото'), mno.body);
+
+  // 11. пустой файл (iOS iCloud: виден в пикере, но не скачан) — честная ошибка, а не пустой файл в папке
+  const page4 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const token4 = (page4.body.match(/const token = '([^']+)'/) || [])[1];
+  const zero = await postChunkMulti(token4, { i: 0, n: 1, name: 'EMPTY.mp4' }, 'chunk', Buffer.alloc(0));
+  const zj = JSON.parse(zero.body);
+  check('пустой файл отклонён с ключом empty', zero.code === 500 && zj.error === 'empty', zero.body);
+
+  // 12. чат сессии: текст/ссылки с телефона на ПК без интернета (+ записка в папку)
+  const page5 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const token5 = (page5.body.match(/const token = '([^']+)'/) || [])[1];
+  check('чат: кнопка в окне QR', page5.body.includes('id="chatBtn"') && page5.body.includes('id="chatOverlay"'), 'кнопки нет');
+  let qrJsOk = false, qrJsErr = '';
+  try {
+    const qblocks = [...page5.body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x => x[1]);
+    const chatJs = qblocks.find(s => s.includes('function openChat'));
+    if (!chatJs) throw new Error('блок чата не найден');
+    new (require('vm').Script)(chatJs);
+    qrJsOk = true;
+  } catch (e) { qrJsErr = e.message; }
+  check('чат: JS окна без синтаксических ошибок', qrJsOk, qrJsErr);
+  const up5 = await get(`${BASE}/u?t=${token5}`);
+  check('чат: поле ввода на телефоне', up5.body.includes('id="msgIn"') && up5.body.includes('function sendMsg'), 'поля нет');
+  check('чат: шторка на телефоне как на ПК', up5.body.includes('id="msgOverlay"') && up5.body.includes('function openMsgs') && up5.body.includes('id="msgOpenBtn"'), 'шторки нет');
+  const g1 = await postJson(`${BASE}/u?t=${token5}&msg=1`, { text: 'https://example.com/very/long/link?x=1' });
+  check('чат: сообщение с телефона принято', g1.code === 200 && JSON.parse(g1.body).ok, g1.body);
+  const gEmpty = await postJson(`${BASE}/u?t=${token5}&msg=1`, { text: '   ' });
+  check('чат: пустое отклонено', gEmpty.code === 400, gEmpty.body);
+  const gPc = await postJson(`${BASE}/api/msg?t=${token5}`, { text: 'привет с ПК <b>не тег</b>' });
+  check('чат: ответ с ПК принят', gPc.code === 200 && JSON.parse(gPc.body).ok, gPc.body);
+  const ml = await get(`${BASE}/u?t=${token5}&msgs=1&since=0`);
+  const mlj = JSON.parse(ml.body);
+  check('чат: оба сообщения читаются', ml.code === 200 && mlj.n === 2 && mlj.msgs[0].from === 'phone' && mlj.msgs[1].from === 'pc', ml.body);
+  check('чат: HTML хранится сырым (экранирует клиент)', mlj.msgs[1].text.includes('<b>'), mlj.msgs[1].text);
+  const ml1 = await get(`${BASE}/u?t=${token5}&msgs=1&since=1`);
+  check('чат: since отдаёт только новые', JSON.parse(ml1.body).msgs.length === 1, ml1.body);
+  const st5 = await get(`${BASE}/api/status?t=${token5}`);
+  check('чат: статус несёт счётчик', JSON.parse(st5.body).msgN === 2, st5.body);
+  await new Promise(r => setTimeout(r, 300));
+  const notes = fs.readdirSync(FOLDER).filter(f => f.startsWith('note-') && f.endsWith('.txt'));
+  check('чат: записка note-*.txt в папке', notes.length === 2, notes.join(','));
+
+  // 13. обратная передача ПК → телефон: выложил в окне — забрал по ссылке
+  fs.writeFileSync(path.join(FOLDER, 'give.jpg'), jpg);
+  fs.writeFileSync(path.join(FOLDER, 'give.txt'), 'hello-share');
+  const page6 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const token6 = (page6.body.match(/const token = '([^']+)'/) || [])[1];
+  check('раздача: блок в окне QR', page6.body.includes('id="shareBox"') && page6.body.includes('function postShare'), 'блока нет');
+  const up6 = await get(`${BASE}/u?t=${token6}`);
+  check('раздача: секция на телефоне', up6.body.includes('id="dlList"') && up6.body.includes('function pollDl'), 'секции нет');
+  const sh = await postJson(`${BASE}/api/share?t=${token6}`, { paths: [path.join(FOLDER, 'give.jpg'), path.join(FOLDER, 'give.txt'), path.join(FOLDER, 'нетакого.bin')] });
+  const shj = JSON.parse(sh.body);
+  check('раздача: 2 добавлено, мусор пропущен', sh.code === 200 && shj.added.length === 2 && !shj.folder, sh.body);
+  const shDup = await postJson(`${BASE}/api/share?t=${token6}`, { paths: [path.join(FOLDER, 'give.jpg')] });
+  check('раздача: дубль не плодится', JSON.parse(shDup.body).added.length === 0, shDup.body);
+  const dl = await get(`${BASE}/u?t=${token6}&share=1`);
+  const dlj = JSON.parse(dl.body);
+  check('раздача: free видит только картинки', dl.code === 200 && dlj.items.length === 1 && dlj.items[0].name === 'give.jpg', dl.body);
+  const gid = dlj.items[0].id;
+  const gf = await get(`${BASE}/u?t=${token6}&get=` + gid);
+  check('раздача: скачивание 200 + jpeg', gf.code === 200 && (gf.headers['content-type'] || '').includes('image/jpeg'), gf.code + ' ' + gf.headers['content-type']);
+  const gBad = await get(`${BASE}/u?t=${token6}&get=nope`);
+  check('раздача: чужой id — 404', gBad.code === 404, gBad.body);
+  const gTrav = await get(`${BASE}/u?t=${token6}&get=../give.jpg`);
+  check('раздача: обход путём — 404', gTrav.code === 404, gTrav.body);
+  const uns = await postJson(`${BASE}/api/unshare?t=${token6}`, { id: gid });
+  check('раздача: снятие с раздачи', uns.code === 200 && JSON.parse(uns.body).share.length === 1, uns.body);
+  const dl2 = await get(`${BASE}/u?t=${token6}&share=1`);
+  check('раздача: телефон больше не видит', JSON.parse(dl2.body).items.length === 0, dl2.body);
+
+  // 14. чистка записок: вопрос перед новым QR + ручная кнопка, чужие файлы целы
+  const page7 = await get(`${BASE}/?folder=${encodeURIComponent(FOLDER)}`);
+  const token7 = (page7.body.match(/const token = '([^']+)'/) || [])[1];
+  check('чистка: окно-подтверждение в QR', page7.body.includes('id="cleanOverlay"') && page7.body.includes('function cleanAsk'), 'окна нет');
+  await postJson(`${BASE}/api/msg?t=${token7}`, { text: 'удали меня 1' });
+  await postJson(`${BASE}/api/msg?t=${token7}`, { text: 'удали меня 2' });
+  await new Promise(r => setTimeout(r, 200));
+  const notesBefore = fs.readdirSync(FOLDER).filter(f => f.startsWith('note-') && f.endsWith('.txt'));
+  const st7 = await get(`${BASE}/api/status?t=${token7}`);
+  check('чистка: счётчик записок в статусе', JSON.parse(st7.body).notes === 2, st7.body);
+  const cl = await postJson(`${BASE}/api/cleannotes?t=${token7}`, {});
+  check('чистка: удалено 2', cl.code === 200 && JSON.parse(cl.body).removed === 2, cl.body);
+  const notesAfter = fs.readdirSync(FOLDER).filter(f => f.startsWith('note-') && f.endsWith('.txt'));
+  check('чистка: с диска ушли только свои', notesAfter.length === notesBefore.length - 2, notesAfter.join(','));
+  check('чистка: чужие файлы целы', fs.existsSync(path.join(FOLDER, 'give.jpg')) && fs.existsSync(path.join(FOLDER, 'give.txt')), 'побили чужое');
+  const st7b = await get(`${BASE}/api/status?t=${token7}`);
+  check('чистка: счётчик обнулён', JSON.parse(st7b.body).notes === 0, st7b.body);
+  const cl2 = await postJson(`${BASE}/api/cleannotes?t=${token7}`, {});
+  check('чистка: повтор — 0', JSON.parse(cl2.body).removed === 0, cl2.body);
 
   console.log('\nПРОЙДЕНО:');
   ok.forEach(o => console.log('  ✓ ' + o));

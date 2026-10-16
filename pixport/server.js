@@ -26,7 +26,7 @@ const { licenseState, activateKey, clearLicense, isPro, machineId } = require('.
 
 const PORT = 8765;
 const HOST = '0.0.0.0';
-const APP_VERSION = '1.1.0'; // видна в окне — по ней проверяем, та ли сборка
+const APP_VERSION = '1.2.0'; // видна в окне — по ней проверяем, та ли сборка
 // GitHub-репозиторий релизов: проверка обновлений тянет
 // https://api.github.com/repos/<repo>/releases/latest (тег vX.Y.Z + Setup-*.exe).
 const UPDATE_REPO = 'akkerqq/PixPort';
@@ -115,7 +115,7 @@ function moveFile(tmp, dest) {
 /** Создать одноразовую сессию для папки. */
 function createSession(folder) {
   const token = crypto.randomBytes(12).toString('base64url');
-  sessions.set(token, { folder, created: Date.now(), received: 0, files: [] });
+  sessions.set(token, { folder, created: Date.now(), received: 0, files: [], msgs: [], share: [], shareSeq: 1 });
   console.log(`\n[QR] Папка: ${folder}`);
   console.log(`[QR] Ссылка живёт 30 минут или до закрытия окна QR.\n`);
   return token;
@@ -199,6 +199,18 @@ function uploadPage(token, folderName, lang) {
   label.btn.alt { background:var(--soft); color:var(--ink); border:1px solid var(--line); }
   label.btn.file { background:transparent; color:var(--brand); border:2px dashed var(--brand); font-size:16px; padding:15px; }
   label.btn input { display:none; }
+  .overlay {
+    display:none; position:fixed; inset:0; background:rgba(15,18,40,.5);
+    align-items:flex-end; justify-content:center; padding:0; z-index:10;
+  }
+  .overlay.open { display:flex; }
+  .sheet {
+    background:var(--card); color:var(--ink); border:1px solid var(--line);
+    border-radius:20px 20px 0 0; box-shadow:var(--shadow); max-width:480px; width:100%;
+    padding:16px 14px calc(env(safe-area-inset-bottom) + 12px); text-align:left;
+    display:flex; flex-direction:column; height:min(82dvh,620px);
+  }
+  .sheet h3 { font-size:17px; margin:0; }
   #status {
     margin-top:16px; width:100%; background:var(--card); border:1px solid var(--line);
     border-radius:14px; padding:14px 16px; font-size:15px; color:var(--ok); text-align:center;
@@ -235,15 +247,36 @@ function uploadPage(token, folderName, lang) {
     ${isPro() ? `<label class="btn file">
       <span data-i="btn_file">📁 Файл / видео</span>
       <input type="file" multiple onchange="sendFiles(this)">
-    </label>` : ''}
+    </label>
+    <div data-i="icloudHint" style="font-size:11px;color:var(--muted);max-width:320px;margin:-4px 0 8px"></div>` : ''}
   </div>
 
   <div id="status"></div>
+  <button id="msgOpenBtn" onclick="openMsgs()" style="width:100%;max-width:420px;margin-top:10px;font-size:15px;font-weight:700;padding:13px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;box-shadow:var(--shadow)"><span data-i="btn_chat">💬 Чат</span><span id="msgBadge" style="display:none;color:#fff;background:var(--err);border-radius:999px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:6px;vertical-align:2px"></span></button>
+  <div class="overlay" id="msgOverlay" onclick="if(event.target===this)closeMsgs()">
+    <div class="sheet">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 data-i="chatTitle">Чат сессии</h3>
+        <button onclick="closeMsgs()" title="✕" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-size:14px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div id="msgList" style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+      <div id="chatEmpty" data-i="chatEmpty" style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px;text-align:center">Пока тихо — напиши с телефона, упадёт сюда и запиской в папку</div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <input id="msgIn" data-i-ph="chatPh" placeholder="Текст или ссылка с телефона…" onkeydown="if(event.key==='Enter')sendMsg()" style="flex:1;min-width:0;font-size:16px;padding:11px 14px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--ink)">
+        <button id="msgBtn" onclick="sendMsg()" data-i="chatSend" style="flex:0 0 auto;font-size:14px;font-weight:700;padding:11px 18px;border-radius:999px;border:0;background:var(--brand);color:var(--brand-ink);cursor:pointer">Отправить</button>
+      </div>
+      <div data-i="chatNote" style="font-size:11.5px;color:var(--muted);text-align:center">Живёт пока жив QR. Каждое сообщение — ещё и note-*.txt в папке.</div>
+    </div>
+  </div>
+  <div style="width:100%;max-width:420px;margin-top:12px;font-size:14px;font-weight:800;text-align:center" data-i="dlTitle">📥 С компьютера</div>
+  <div id="dlList" style="width:100%;max-width:420px;margin-top:6px;display:flex;flex-direction:column;gap:6px"></div>
+  <div id="dlEmpty" data-i="dlEmpty" style="width:100%;max-width:420px;margin-top:2px;font-size:12px;color:var(--muted);text-align:center">Пока нечем делиться — кинь файлы в окно на ПК</div>
   <div id="upWrap" style="display:none;width:100%;max-width:320px;background:var(--soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;height:10px"><div id="upBar" style="height:100%;width:0%;background:var(--brand);border-radius:999px"></div></div>
   <div id="upPct" style="display:none;font-size:12px;color:var(--muted)"></div>
   <details id="ulog" style="display:none;width:100%;max-width:420px;margin-top:10px;font-size:11px;color:var(--muted);text-align:left">
     <summary data-i="showLog" style="cursor:pointer">Лог отправки</summary>
     <pre id="ulogPre" style="white-space:pre-wrap;word-break:break-all;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:6px;max-height:150px;overflow:auto"></pre>
+    <button id="copyLogBtn" onclick="copyLog()" style="margin-top:6px;font-size:12px;font-weight:700;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer">⧉ Скопировать лог</button>
   </details>
   </div>
   <div class="foot" data-i="foot">PixPort · без проводов и мессенджеров</div>
@@ -278,6 +311,160 @@ function j(msg) {
     document.getElementById('ulogPre').textContent = jlog.join('\\n');
   } catch (e) {}
 }
+function copyLog() {
+  try {
+    const txt = jlog.join('\\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => j('лог скопирован'));
+    else { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); j('лог скопирован'); }
+  } catch (e) { j('копирование не вышло: ' + e); }
+}
+async function pingServer() {
+  const t0 = Date.now();
+  try {
+    const r = await fetch('/u?t=${token}&ping=1', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    j('пинг ' + (Date.now() - t0) + ' мс');
+    return true;
+  } catch (e) { j('пинг не прошёл: ' + (e.message || e)); return false; }
+}
+// детерминированный cid: тот же файл после перезагрузки страницы продолжает, а не начинает сначала.
+// 32 hex-символа — проходит серверный regex /^[0-9a-f]{16,64}$/.
+function makeCid(f) {
+  const s = (f.name || '') + '|' + f.size + '|' + (f.lastModified || 0);
+  let h1 = 5381, h2 = 52711;
+  for (let k = 0; k < s.length; k++) { const c = s.charCodeAt(k); h1 = ((h1 << 5) + h1 + c) >>> 0; h2 = ((h2 << 5) + h2 + c * 31) >>> 0; }
+  const x = (v, seed) => { let z = (v ^ seed) >>> 0; z = Math.imul(z ^ (z >>> 15), 2246822519); z = Math.imul(z ^ (z >>> 13), 3266489917); return (z ^ (z >>> 16)) >>> 0; };
+  let out = '';
+  for (let k = 0; k < 4; k++) out += x(h1 + k * 2654435761, h2 + k * 40503).toString(16).padStart(8, '0');
+  return out;
+}
+// адаптивный размер куска: чистая сеть — крупнее (меньше RTT), душащая — мельче.
+// Решение на файл, а не внутри файла: границы кусков фиксированы, докачка не ломается.
+let adaptSz = 512 * 1024;
+const ADAPT_MIN = 256 * 1024, ADAPT_MAX = 2 * 1024 * 1024;
+function adaptOk(retries) { adaptSz = retries === 0 ? Math.min(ADAPT_MAX, adaptSz * 2) : retries > 2 ? Math.max(ADAPT_MIN, adaptSz / 2) : adaptSz; }
+// чат сессии: текст/ссылки на ПК без интернета. Живёт пока жив QR, дублируется запиской note-*.txt в папке.
+let msgSince = 0, msgBusy = false, msgAll = [];
+function escHtmlChat(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function linkify(s) {
+  return escHtmlChat(s).replace(/(https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+)/g, function (u) {
+    const href = u.indexOf('http') === 0 ? u : 'http://' + u;
+    return '<a href="' + href + '" target="_blank" rel="noopener">' + u + '</a>';
+  });
+}
+function msgBubble(m) {
+  const mine = m.from === 'phone'; // свои — синие справа, с ПК — серые слева
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start');
+  const b = document.createElement('div');
+  b.style.cssText = 'max-width:85%;border-radius:14px;padding:8px 11px;font-size:13px;line-height:1.45;word-break:break-word;' +
+    (mine ? 'background:var(--brand);color:#fff;border-bottom-right-radius:4px'
+          : 'background:var(--soft);color:var(--ink);border:1px solid var(--line);border-bottom-left-radius:4px');
+  const tx = document.createElement('div');
+  tx.innerHTML = linkify(m.text || '');
+  if (mine) tx.querySelectorAll('a').forEach(function (a) { a.style.color = '#fff'; });
+  const meta = document.createElement('div');
+  meta.style.cssText = 'text-align:right;font-size:10px;margin-top:3px;opacity:.75';
+  try { meta.textContent = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) {}
+  b.appendChild(tx); b.appendChild(meta);
+  row.appendChild(b);
+  return row;
+}
+let msgDrawn = 0; // сколько уже в DOM: новые дописываем снизу, старые уезжают вверх
+function renderMsgs(list, boxId) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const empty = document.getElementById('chatEmpty');
+  if (empty) empty.style.display = list.length ? 'none' : '';
+  if (list.length < msgDrawn) { box.innerHTML = ''; msgDrawn = 0; } // не бывает, но перестраховка
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  for (; msgDrawn < list.length; msgDrawn++) box.appendChild(msgBubble(list[msgDrawn]));
+  if (nearBottom) box.scrollTop = box.scrollHeight;
+}
+async function sendMsg() {
+  const inp = document.getElementById('msgIn');
+  const text = (inp.value || '').trim();
+  if (!text || msgBusy) return;
+  msgBusy = true;
+  try {
+    const r = await fetch('/u?t=${token}&msg=1', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text.slice(0, 2000) }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    inp.value = '';
+    j('сообщение ушло (' + text.length + ' симв.)');
+    await pollMsgs();
+  } catch (e) { j('сообщение не ушло: ' + (e.message || e)); }
+  msgBusy = false;
+}
+async function pollMsgs() {
+  // ответы с ПК забираем тихим опросом раз в 3с — локалка, дёшево
+  try {
+    const r = await fetch('/u?t=${token}&msgs=1&since=' + msgSince, { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && d.ok && d.msgs && d.msgs.length) {
+      msgSince = d.n; msgAll = msgAll.concat(d.msgs); renderMsgs(msgAll, 'msgList');
+      if (msgsOpen) msgSeenPc = msgAll.filter(function (m) { return m.from === 'pc'; }).length;
+      paintMsgBadge();
+    }
+  } catch (e) {}
+}
+setInterval(pollMsgs, 3000);
+let msgsOpen = false, msgSeenPc = 0;
+function openMsgs() {
+  document.getElementById('msgOverlay').classList.add('open');
+  msgsOpen = true;
+  msgSeenPc = msgAll.filter(function (m) { return m.from === 'pc'; }).length;
+  paintMsgBadge();
+  renderMsgs(msgAll, 'msgList');
+  const box = document.getElementById('msgList');
+  if (box) box.scrollTop = box.scrollHeight;
+}
+function closeMsgs() {
+  document.getElementById('msgOverlay').classList.remove('open');
+  msgsOpen = false;
+}
+function paintMsgBadge() {
+  const b = document.getElementById('msgBadge');
+  if (!b) return;
+  const fresh = msgAll.filter(function (m) { return m.from === 'pc'; }).length - msgSeenPc;
+  b.style.display = fresh > 0 ? '' : 'none';
+  b.textContent = fresh > 0 ? t('chatNew') + ' ' + fresh : '';
+}
+// раздача с ПК: что выложили в окне — забираем по ссылке (скачивание нативное, браузером)
+function fmtSize(n) {
+  n = Number(n) || 0;
+  if (n >= 1048576) return (n / 1048576).toFixed(n >= 10485760 ? 0 : 1) + ' МБ';
+  if (n >= 1024) return Math.round(n / 1024) + ' КБ';
+  return n + ' Б';
+}
+async function pollDl() {
+  try {
+    const r = await fetch('/u?t=${token}&share=1', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d || !d.ok || !d.items) return;
+    const box = document.getElementById('dlList');
+    const empty = document.getElementById('dlEmpty');
+    if (!box) return;
+    if (empty) empty.style.display = d.items.length ? 'none' : '';
+    const sig = d.items.map(function (e) { return e.id + ':' + e.size + ':' + e.name; }).join('|');
+    if (box.dataset.sig === sig) return; // то же самое — не трогаем (иначе рвём тап)
+    box.dataset.sig = sig;
+    box.innerHTML = '';
+    d.items.forEach(function (e) {
+      const a = document.createElement('a');
+      a.href = '/u?t=${token}&get=' + encodeURIComponent(e.id);
+      a.setAttribute('download', e.name);
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.style.cssText = 'display:block;font-size:13.5px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 12px;word-break:break-all;color:var(--brand);text-decoration:none;font-weight:600';
+      a.textContent = '⬇ ' + e.name + ' · ' + fmtSize(e.size);
+      box.appendChild(a);
+    });
+  } catch (e) {}
+}
+setInterval(pollDl, 5000);
+pollDl();
 // любая молчаливая JS-ошибка на странице — красным в статус, а не тишина:
 // иначе отладка превращается в гадание (кейс 12.10: выбор файла и ничего)
 window.addEventListener('error', e => {
@@ -317,15 +504,23 @@ async function sendFiles(el) {
   const pct = document.getElementById('upPct');
   st.className = 'show';
   const setPct = p => { bar.style.width = p + '%'; pct.textContent = p + '%'; };
+  const fails = []; // один битый файл больше не убивает всю очередь
+  await pingServer();
   for (const f of files) {
     if (f.size > MAXSIZE) {
-      st.className = 'show err';
-      st.textContent = t('tooBig', { lim: LIMSTR });
+      fails.push(f.name);
       j('SKIP ' + f.name + ' (' + f.size + ' Б > ' + LIMSTR + ')');
-      wrap.style.display = 'none'; pct.style.display = 'none';
+      continue;
+    }
+    if (f.size === 0) { // iCloud: байтов нет уже на клиенте — сервер можно не дёргать
+      fails.push(f.name);
+      st.className = 'show err';
+      st.textContent = t('sendErr', { e: t('empty') });
+      j('FAIL ' + f.name + ': empty (0 байт на клиенте)');
       continue;
     }
     j('SEND ' + f.name + ' ' + f.size + ' Б');
+    st.className = 'show';
     st.textContent = t('sending', { f: f.name });
     wrap.style.display = ''; pct.style.display = ''; setPct(0);
     try {
@@ -333,24 +528,27 @@ async function sendFiles(el) {
       else { j('обычный — одним запросом'); await sendSingle(f, setPct); }
       total++;
       j('DONE ' + f.name + ' (всего ' + total + ')');
-      st.className = 'show';
-      st.innerHTML = '<div class="count">' + t('sent', { n: total }) + '</div>';
-      wrap.style.display = 'none'; pct.style.display = 'none';
     } catch (e) {
+      fails.push(f.name);
+      // сервер возвращает ключи ошибок ('empty' и др.) — переводим через словарь, иначе сырой ключ
       st.className = 'show err';
-      st.textContent = t('sendErr', { e: e.message });
-      j('FAIL ' + f.name + ': ' + e.message + ' — раскрой «Лог отправки» и пришли скрин');
+      st.textContent = t('sendErr', { e: e.message === 'empty' ? t('empty') : e.message });
+      j('FAIL ' + f.name + ': ' + e.message + ' — иду дальше, остальное досылаю');
       wrap.style.display = 'none'; pct.style.display = 'none';
-      sending = false;
-      return;
+      continue;
     }
   }
+  wrap.style.display = 'none'; pct.style.display = 'none';
   sending = false;
+  st.className = fails.length ? 'show err' : 'show';
+  st.innerHTML = '<div class="count">' + t('sent', { n: total }) + '</div>' +
+    (fails.length ? '<div style="font-size:13px">не ушло (' + fails.length + '): ' + fails.slice(0, 3).join(', ') + (fails.length > 3 ? '…' : '') + '</div>' : '');
 }
 
 function sendSingle(f, setPct) {
-  // fetch процентов загрузки не даёт — шлём через XHR ради прогресса
-  return new Promise((resolve, reject) => {
+  // fetch процентов загрузки не даёт — шлём через XHR ради прогресса.
+  // Ретраим и одиночные: раньше одна судорога сети убивала весь файл.
+  const post = () => new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', f, f.name);
     const x = new XMLHttpRequest();
@@ -367,13 +565,28 @@ function sendSingle(f, setPct) {
     x.ontimeout = () => reject(new Error('timeout'));
     x.send(fd);
   });
+  return (async () => {
+    let lastErr = new Error('net');
+    for (let a = 0; a < 3; a++) {
+      try { await post(); return; }
+      catch (e) { lastErr = e; if (e.message === 'empty') throw e; j('одиночный попытка ' + (a + 1) + ': ' + e.message); await new Promise(r => setTimeout(r, 900 * (a + 1))); }
+    }
+    throw lastErr;
+  })();
 }
 
-function sendChunked(f, setPct) {
+async function sendChunked(f, setPct) {
   // большие файлы — кусками: вкладка не давится, прогресс честный,
-  // обрыв докачиваем с места (сервер помнит, сколько кусков уже лежит)
-  const n = Math.ceil(f.size / CHUNKSZ);
-  j('кусков: ' + n + ' по ' + Math.round(CHUNKSZ / 1024) + ' КБ');
+  // обрыв докачиваем с места (сервер помнит, сколько кусков уже лежит).
+  // cid детерминирован от файла: перезагрузка страницы продолжает, а не начинает сначала.
+  const cid = makeCid(f);
+  let sz = adaptSz;
+  try {
+    const saved = JSON.parse(localStorage.getItem('pixport-up-' + cid) || 'null');
+    if (saved && saved.sz >= ADAPT_MIN && saved.sz <= ADAPT_MAX) sz = saved.sz;
+  } catch (e) {}
+  const n = Math.ceil(f.size / sz);
+  j('кусков: ' + n + ' по ' + Math.round(sz / 1024) + ' КБ (cid ' + cid.slice(0, 8) + ')');
   const pctEl = document.getElementById('upPct');
   let curB = 0, curP = 0, lastB = 0, lastT = Date.now(); // байты для спидометра
   let curXhr = null, lastProg = Date.now(); // сторож простоя
@@ -393,37 +606,35 @@ function sendChunked(f, setPct) {
     lastB = curB; lastT = now;
     pctEl.textContent = curP + '% · ' + fmtSpd(bps);
   }, 1000);
-  const rnd = new Uint8Array(16);
-  crypto.getRandomValues(rnd);
-  const cid = Array.from(rnd, b => b.toString(16).padStart(2, '0')).join('');
   const postOne = idx => new Promise((resolve, reject) => {
     // кусок — тем же multipart, что обычное фото: для middlebox неотличимо (урок 12.10).
     // Поля ПЕРЕД файлом: сервер решает режим (кусок/целое) до начала чтения тела.
+    const t0 = Date.now();
     const fd = new FormData();
     fd.append('cid', cid);
     fd.append('i', String(idx));
     fd.append('n', String(n));
     fd.append('name', f.name);
-    fd.append('file', f.slice(idx * CHUNKSZ, Math.min(f.size, (idx + 1) * CHUNKSZ)), 'chunk');
+    fd.append('file', f.slice(idx * sz, Math.min(f.size, (idx + 1) * sz)), 'chunk');
     const x = new XMLHttpRequest();
     x.open('POST', '/u?t=${token}');
     x.timeout = 120000; // кусок дольше 2 минут — не ждём вечно, а ретраим (иначе вечный 0%)
     curXhr = x; // сторож ниже может его прибить при простое
     x.upload.onprogress = e => { // прогресс ВНУТРИ куска, а не только между кусками
       if (!e.lengthComputable) return;
-      curB = idx * CHUNKSZ + e.loaded;
+      curB = idx * sz + e.loaded;
       curP = Math.round(curB / f.size * 100);
       lastProg = Date.now();
       setPct(curP);
     };
     x.onload = () => {
       curXhr = null;
-      let j = null;
-      try { j = JSON.parse(x.responseText); } catch (e) {}
-      if (x.status >= 200 && x.status < 300 && j && j.ok) return resolve(j);
-      if (x.status === 409 && j && typeof j.wait === 'number') return resolve({ catchUp: j.wait });
+      let jj = null;
+      try { jj = JSON.parse(x.responseText); } catch (e) {}
+      if (x.status >= 200 && x.status < 300 && jj && jj.ok) { j('ч' + idx + ' ' + (Date.now() - t0) + ' мс'); return resolve(jj); }
+      if (x.status === 409 && jj && typeof jj.wait === 'number') return resolve({ catchUp: jj.wait });
       let msg = 'HTTP ' + x.status;
-      if (j && j.error) msg = j.error;
+      if (jj && jj.error) msg = jj.error;
       reject(new Error(msg));
     };
     x.onerror = () => { curXhr = null; reject(new Error('net')); };
@@ -433,7 +644,13 @@ function sendChunked(f, setPct) {
   });
   return (async () => {
     try {
-    let idx = 0;
+    // спросим сервер, сколько уже лежит: страница могла перезагрузиться посреди файла
+    let idx = 0, retries = 0;
+    try {
+      const r = await fetch('/u?t=${token}&state=1&cid=' + cid, { cache: 'no-store' });
+      const st = await r.json();
+      if (st && st.ok && st.got > 0 && st.n === n) { idx = st.got; curP = Math.round(idx / n * 100); setPct(curP); j('продолжаю с ' + idx + '/' + n); }
+    } catch (e) {}
     while (idx < n) {
       let ok = false, lastErr = null;
       for (let a = 0; a < 6 && !ok; a++) {
@@ -443,17 +660,23 @@ function sendChunked(f, setPct) {
           if (r && typeof r.catchUp === 'number') { j('ч' + idx + ': сервер обогнал, догоняю с ' + r.catchUp); idx = r.catchUp; }
           else { idx++; j('ч' + (idx - 1) + ' ок (' + idx + '/' + n + ')'); }
           ok = true;
-        } catch (e) { lastErr = e; j('ч' + idx + ' попытка ' + (a + 1) + ': ' + e.message); await new Promise(r2 => setTimeout(r2, 800 * (a + 1))); }
+        } catch (e) { lastErr = e; retries++; if (e.message === 'empty') throw e; j('ч' + idx + ' попытка ' + (a + 1) + ': ' + e.message); await new Promise(r2 => setTimeout(r2, 800 * (a + 1))); }
       }
-      if (!ok) throw lastErr;
+      if (!ok) { adaptOk(99); throw lastErr; }
+      try { localStorage.setItem('pixport-up-' + cid, JSON.stringify({ sz, got: idx })); } catch (e) {}
       curP = Math.round(idx / n * 100);
       setPct(curP);
     }
+    try { localStorage.removeItem('pixport-up-' + cid); } catch (e) {}
+    adaptOk(retries);
     } finally { clearInterval(spdTimer); clearInterval(dog); }
   })();
 }
-// не даём экрану заснуть во время загрузки
-if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(()=>{});
+// не даём экрану заснуть во время загрузки (перезапрос: iOS сбрасывает lock при сворачивании)
+let __wl = null;
+function keepAwake() { try { if ('wakeLock' in navigator) navigator.wakeLock.request('screen').then(l => { __wl = l; }).catch(() => {}); } catch (e) {} }
+keepAwake();
+document.addEventListener('visibilitychange', () => { if (!document.hidden && sending) keepAwake(); });
 </script>
 </body>
 </html>`;
@@ -625,10 +848,20 @@ function qrPage(token, folder, net) {
   <div class="status" id="status" data-i="status_wait">Ожидание телефона…</div>
   <div class="actions">
     <button id="newQrBtn" onclick="newQr()" data-i="btn_new" style="font-size:15.5px;padding:11px 24px">Новый QR</button>
+    <button id="chatBtn" onclick="openChat()" style="font-size:15.5px;padding:11px 24px"><span data-i="btn_chat">💬 Чат</span><span id="chatBadge" style="display:none;color:#fff;background:var(--err);border-radius:999px;font-size:10px;font-weight:800;padding:1px 7px;margin-left:6px;vertical-align:2px"></span></button>
   </div>
   <div class="actions" style="margin-top:0">
     <button id="openBtn" onclick="openFolder()" data-i="btn_open">Открыть папку</button>
     <button id="pickBtn" onclick="pickFolder()" data-i="btn_pick">Сменить папку</button>
+  </div>
+  <div id="shareBox" style="display:none;width:100%;flex-direction:column;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:2px">
+    <div style="font-size:14px;font-weight:800" data-i="shareTitle">📤 На телефон</div>
+    <div id="shareList" style="display:flex;flex-direction:column;gap:6px;width:100%"></div>
+    <div class="actions" style="margin-top:0">
+      <button id="shareBtn" onclick="sharePick()" data-i="shareBtn">Выбрать файлы</button>
+    </div>
+    <input type="file" id="shareIn" multiple style="display:none">
+    <div class="hint" data-i="shareHint">или перетащи файлы в это окно — телефон заберёт их по ссылке ниже</div>
   </div>
   <div class="hint" data-i="hint_scan">Сканируй камерой телефона · код живёт 30 минут</div>
   ${netHint}
@@ -703,6 +936,33 @@ function qrPage(token, folder, net) {
       </div>
       <div id="payMsg" style="font-size:13px;color:var(--muted);min-height:18px;margin-top:8px;text-align:center"></div>
       <div class="closeRow"><button onclick="closePro()" data-i="btn_ok" style="background:var(--soft);color:var(--ink);border:1px solid var(--line)">Понятно</button></div>
+    </div>
+  </div>
+  <div class="overlay" id="chatOverlay" onclick="if(event.target===this)closeChat()">
+    <div class="sheet" style="display:flex;flex-direction:column;height:min(600px,calc(100vh - 48px));padding:16px 14px 12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 data-i="chatTitle" style="margin:0">Чат сессии</h3>
+        <button onclick="closeChat()" title="✕" style="width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-size:14px;cursor:pointer;line-height:1">✕</button>
+      </div>
+      <div id="chatList" style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+      <div id="chatEmpty" data-i="chatEmpty" style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:10px">Пока тихо — напиши с телефона, упадёт сюда и запиской в папку</div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <input id="chatIn" data-i-ph="chatPcPh" placeholder="Ответ с компьютера…" onkeydown="if(event.key==='Enter')sendChat()" style="flex:1;min-width:0;font-size:14px;padding:10px 12px;border-radius:999px;border:1px solid var(--line);background:var(--soft);color:var(--ink)">
+        <button onclick="sendChat()" data-i="chatSend" style="flex:0 0 auto;font-size:14px;font-weight:700;padding:10px 18px;border-radius:999px;border:0;background:var(--brand);color:var(--brand-ink);cursor:pointer">Отправить</button>
+      </div>
+      <div class="note" data-i="chatNote" style="font-size:11.5px;color:var(--muted);text-align:center">Живёт пока жив QR. Каждое сообщение — ещё и note-*.txt в папке.</div>
+      <button class="helpLink" onclick="cleanAsk(null)" data-i="cleanBtn" style="margin-top:6px">🧹 Удалить записки сессии</button>
+    </div>
+  </div>
+  <div class="overlay" id="cleanOverlay">
+    <div class="sheet" style="max-width:340px">
+      <h3 data-i="cleanTitle">Записки сессии</h3>
+      <div id="cleanQ" style="font-size:14px;line-height:1.6;color:var(--ink)"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
+        <button onclick="cleanGo(true)" data-i="cleanYes" style="font-size:13.5px;font-weight:700;padding:9px 16px;border-radius:10px;border:0;background:var(--err);color:#fff;cursor:pointer">Удалить и продолжить</button>
+        <button onclick="cleanGo(false)" data-i="cleanKeep" style="font-size:13.5px;font-weight:700;padding:9px 16px;border-radius:10px;border:1px solid var(--line);background:var(--soft);color:var(--ink);cursor:pointer">Оставить</button>
+        <button onclick="cleanCancel()" data-i="cleanCancel" style="font-size:13.5px;padding:9px 16px;border-radius:10px;border:0;background:none;color:var(--muted);cursor:pointer">Отмена</button>
+      </div>
     </div>
   </div>
 
@@ -960,19 +1220,139 @@ async function refresh() {
     const s = await r.json();
     const st = document.getElementById('status');
     if (s.received > 0) st.innerHTML = t('received', { n: s.received });
+    if (s.msgs) {
+      renderChatList(s.msgs);
+      if (chatOpen) chatSeenPhone = lastMsgs.filter(function (m) { return m.from === 'phone'; }).length;
+      paintChatBadge();
+    }
+    if (s.share) renderShare(s.share);
+    if (typeof s.notes === 'number') notesN = s.notes;
   } catch (e) { /* сервер жив, просто мигнули */ }
 }
 setInterval(refresh, 1200);
 
 function die(msg) { dead = true; document.getElementById('status').textContent = msg; }
 
-function newQr() { location.href = '/api/new?t=' + token; }
+function newQr() {
+  // обновление убивает сессию — спросить про записки, если накопились
+  if (notesN > 0) cleanAsk('new');
+  else newQrGo();
+}
+function newQrGo() { location.href = '/api/new?t=' + token; }
+// чистка записок сессии: ручная кнопка в чате + вопрос перед обновлением QR
+let cleanNext = null, notesN = 0;
+function cleanAsk(next) {
+  cleanNext = next;
+  const q = document.getElementById('cleanQ');
+  if (q) q.textContent = t('cleanQ', { n: notesN });
+  document.getElementById('cleanOverlay').classList.add('open');
+}
+async function cleanGo(del) {
+  if (del) {
+    try { await fetch('/api/cleannotes?t=' + token, { method: 'POST' }); } catch (e) {}
+  }
+  document.getElementById('cleanOverlay').classList.remove('open');
+  const nx = cleanNext; cleanNext = null;
+  if (nx === 'new') newQrGo();
+  else refresh();
+}
+function cleanCancel() {
+  document.getElementById('cleanOverlay').classList.remove('open');
+  cleanNext = null;
+}
 function openHelp() { document.getElementById('helpOverlay').classList.add('open'); }
 function closeHelp() { document.getElementById('helpOverlay').classList.remove('open'); }
 function closeQr() {
   navigator.sendBeacon('/api/close?t=' + token);
   if (desktop) setTimeout(() => window.close(), 250);
   else die(t('closed_tab'));
+}
+// чат сессии: телефон шлёт текст/ссылки на ПК без интернета, дубли — записками note-*.txt в папке
+let chatOpen = false, chatSeenPhone = 0, lastMsgs = [];
+function escChat(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function linkifyChat(s) {
+  return escChat(s).replace(/(https?:\\/\\/[^\\s<]+|www\\.[^\\s<]+)/g, function (u) {
+    const href = u.indexOf('http') === 0 ? u : 'http://' + u;
+    return '<a href="' + href + '" target="_blank" rel="noopener">' + u + '</a>';
+  });
+}
+function copyChat(text, btn) {
+  try {
+    const done = () => { if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '⧉'; }, 1200); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(() => {});
+    else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); }
+  } catch (e) {}
+}
+function chatBubble(m) {
+  const mine = m.from === 'pc'; // свои — синие справа, с телефона — серые слева
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start');
+  const b = document.createElement('div');
+  b.style.cssText = 'max-width:85%;border-radius:14px;padding:8px 11px;font-size:13.5px;line-height:1.45;word-break:break-word;box-shadow:var(--shadow);' +
+    (mine ? 'background:var(--brand);color:#fff;border-bottom-right-radius:4px'
+          : 'background:var(--soft);color:var(--ink);border:1px solid var(--line);border-bottom-left-radius:4px');
+  const tx = document.createElement('div');
+  tx.innerHTML = linkifyChat(m.text || '');
+  if (mine) tx.querySelectorAll('a').forEach(function (a) { a.style.color = '#fff'; });
+  const meta = document.createElement('div');
+  meta.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:3px;font-size:10px;opacity:.75';
+  const tm = document.createElement('span');
+  try { tm.textContent = new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { tm.textContent = ''; }
+  const cp = document.createElement('button');
+  cp.textContent = '⧉';
+  cp.title = t('copyBtn');
+  cp.style.cssText = 'font-size:10px;padding:0 4px;border:0;background:none;color:inherit;opacity:.8;cursor:pointer';
+  cp.onclick = (function (txt, btn) { return function () { copyChat(txt, btn); }; })(m.text, cp);
+  meta.appendChild(tm); meta.appendChild(cp);
+  b.appendChild(tx); b.appendChild(meta);
+  row.appendChild(b);
+  return row;
+}
+let chatDrawn = []; // что уже в DOM: новые дописываем в конец, историю не трогаем
+function renderChatList(msgs) {
+  lastMsgs = msgs || [];
+  const box = document.getElementById('chatList');
+  const empty = document.getElementById('chatEmpty');
+  if (!box) return;
+  if (empty) empty.style.display = lastMsgs.length ? 'none' : '';
+  const sameHead = chatDrawn.length <= lastMsgs.length && chatDrawn.every(function (m, i) {
+    return lastMsgs[i] && lastMsgs[i].ts === m.ts && lastMsgs[i].text === m.text;
+  });
+  if (!sameHead) { box.innerHTML = ''; chatDrawn = []; } // история сдвинулась (чистка) — разовая перерисовка
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  for (let k = chatDrawn.length; k < lastMsgs.length; k++) box.appendChild(chatBubble(lastMsgs[k]));
+  chatDrawn = lastMsgs.slice();
+  if (nearBottom) box.scrollTop = box.scrollHeight; // читаешь историю выше — не дёргаем
+}
+function openChat() {
+  document.getElementById('chatOverlay').classList.add('open');
+  chatOpen = true;
+  chatSeenPhone = lastMsgs.filter(function (m) { return m.from === 'phone'; }).length;
+  paintChatBadge();
+  renderChatList(lastMsgs);
+  const box = document.getElementById('chatList'); // было скрыто — скролл мог не прилипнуть
+  if (box) box.scrollTop = box.scrollHeight;
+}
+function closeChat() {
+  document.getElementById('chatOverlay').classList.remove('open');
+  chatOpen = false;
+}
+async function sendChat() {
+  const inp = document.getElementById('chatIn');
+  const text = (inp.value || '').trim();
+  if (!text) return;
+  inp.value = '';
+  try {
+    await fetch('/api/msg?t=' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text.slice(0, 2000) }) });
+    refresh();
+  } catch (e) {}
+}
+function paintChatBadge() {
+  const b = document.getElementById('chatBadge');
+  if (!b) return;
+  const fresh = lastMsgs.filter(function (m) { return m.from === 'phone'; }).length - chatSeenPhone;
+  b.style.display = fresh > 0 ? '' : 'none';
+  b.textContent = fresh > 0 ? t('chatNew') + ' ' + fresh : '';
 }
 function openFolder() {
   if (desktop) window.pixport.openPath(location.search.split('folder=')[1] ? decodeURIComponent(location.search.split('folder=')[1]) : '');
@@ -985,15 +1365,65 @@ async function pickFolder() {
   if (p) location.href = '/?folder=' + encodeURIComponent(p);
 }
 
-// перетаскивание папки в окно
+// перетаскивание в окно: папки — как раньше (QR для неё), файлы — в раздачу на телефон
 if (desktop) {
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', e => {
     e.preventDefault();
-    const f = e.dataTransfer.files[0];
-    if (!f) return;
-    const p = window.pixport.pathForFile(f);
-    if (p) window.pixport.dropPath(p);
+    const paths = [];
+    for (const f of (e.dataTransfer.files || [])) {
+      const p = window.pixport.pathForFile(f);
+      if (p) paths.push(p);
+    }
+    if (paths.length) postShare(paths);
+  });
+  const sb = document.getElementById('shareBox');
+  if (sb) sb.style.display = 'flex';
+}
+// раздача файлов на телефон: выбор кнопкой, список, снять с раздачи
+function fmtSize(n) {
+  n = Number(n) || 0;
+  if (n >= 1048576) return (n / 1048576).toFixed(n >= 10485760 ? 0 : 1) + ' МБ';
+  if (n >= 1024) return Math.round(n / 1024) + ' КБ';
+  return n + ' Б';
+}
+function sharePick() {
+  const inp = document.getElementById('shareIn');
+  if (inp) inp.click();
+}
+async function postShare(paths) {
+  try {
+    const r = await fetch('/api/share?t=' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths }) });
+    const d = await r.json();
+    if (d && d.ok) {
+      if (d.share) renderShare(d.share);
+      if (d.folder) location.href = '/?folder=' + encodeURIComponent(d.folder);
+      if (window.__fitSoon) window.__fitSoon();
+    }
+  } catch (e) {}
+}
+async function unshare(id) {
+  try {
+    const r = await fetch('/api/unshare?t=' + token, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    const d = await r.json();
+    if (d && d.ok && d.share) { renderShare(d.share); if (window.__fitSoon) window.__fitSoon(); }
+  } catch (e) {}
+}
+function renderShare(list) {
+  const box = document.getElementById('shareList');
+  if (!box) return;
+  box.innerHTML = '';
+  (list || []).forEach(function (e) {
+    const d = document.createElement('div');
+    d.style.cssText = 'display:flex;gap:8px;align-items:center;font-size:13px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:7px 10px;word-break:break-all';
+    const nm = document.createElement('span');
+    nm.style.cssText = 'flex:1;min-width:0';
+    nm.textContent = e.name + ' · ' + fmtSize(e.size);
+    const x = document.createElement('button');
+    x.textContent = '✕';
+    x.style.cssText = 'flex:0 0 auto;font-size:11px;padding:3px 9px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--muted);cursor:pointer';
+    x.onclick = (function (id) { return function () { unshare(id); }; })(e.id);
+    d.appendChild(nm); d.appendChild(x); box.appendChild(d);
   });
 }
 
@@ -1045,6 +1475,15 @@ function loadIps() {
 }
 loadQr(null);
 window.__fitSoon = () => setTimeout(fitWin, 50);
+const shareIn = document.getElementById('shareIn');
+if (shareIn) shareIn.addEventListener('change', function () {
+  const paths = [];
+  for (const f of (shareIn.files || [])) {
+    try { const p = window.pixport.pathForFile(f); if (p) paths.push(p); } catch (e) {}
+  }
+  shareIn.value = '';
+  if (paths.length) postShare(paths);
+});
 fitWin(); // окно ровно под контент, без скролла
 setTimeout(fitWin, 1200); // добор после устаканивания шрифтов
 // кнопка PRO: при наведении текст меняется на короткое «PRO» (смена языка вернёт полный — applyLang)
@@ -1129,6 +1568,7 @@ ru: {
   menu_removed: 'Пункт убран из контекстного меню',
   menu_fail: 'Не получилось: ',
   btn_done: 'Готово',
+  whatsTitle: 'Что нового',
   status_closed: 'QR закрыт', received: 'Принято фото: <b>{n}</b>',
   qr_fail: 'Не удалось получить QR: ', err_prefix: 'Ошибка: ',
   wait: 'Секунду…', unknown: 'неизвестно',
@@ -1147,6 +1587,19 @@ ru: {
   sendErr: 'Ошибка: {e}. Попробуй ещё раз.',
   showLog: 'Лог отправки',
   tooBig: 'Файл больше {lim} — выбери поменьше',
+  empty: 'Файл пустой — вероятно, он не скачан с iCloud. Скачай его в «Файлах» (подожди завершения загрузки) и выбери снова',
+  icloudHint: 'Файл с iCloud виден, но не скачан на телефон? Сначала полностью скачай его в «Файлах», потом выбирай здесь',
+  btn_chat: '💬 Чат', chatTitle: 'Чат сессии',
+  chatPh: 'Текст или ссылка с телефона…', chatSend: 'Отправить',
+  chatPcPh: 'Ответ с компьютера…', chatEmpty: 'Пока тихо — напиши с телефона, упадёт сюда и запиской в папку',
+  chatNote: 'Живёт пока жив QR. Каждое сообщение — ещё и note-*.txt в папке.',
+  chatNew: 'новое',
+  shareTitle: '📤 На телефон', shareBtn: 'Выбрать файлы',
+  shareHint: 'или перетащи файлы в это окно — телефон заберёт их по ссылке ниже',
+  dlTitle: '📥 С компьютера', dlEmpty: 'Пока нечем делиться — кинь файлы в окно на ПК',
+  cleanTitle: 'Записки сессии', cleanQ: 'В папке {n} записок этой сессии. Удалить их?',
+  cleanYes: 'Удалить и продолжить', cleanKeep: 'Оставить', cleanCancel: 'Отмена',
+  cleanBtn: '🧹 Удалить записки сессии',
 },
 en: {
   status_wait: 'Waiting for phone…',
@@ -1195,6 +1648,7 @@ en: {
   menu_removed: 'Menu item removed',
   menu_fail: 'Failed: ',
   btn_done: 'Done',
+  whatsTitle: "What's new",
   status_closed: 'QR closed', received: 'Photos received: <b>{n}</b>',
   qr_fail: 'Could not get QR: ', err_prefix: 'Error: ',
   wait: 'One sec…', unknown: 'unknown',
@@ -1213,6 +1667,19 @@ en: {
   sendErr: 'Error: {e}. Try again.',
   showLog: 'Upload log',
   tooBig: 'File exceeds {lim} — pick a smaller one',
+  empty: 'File is empty — likely not downloaded from iCloud. Download it in Files (wait for the iCloud ring) and pick again',
+  icloudHint: 'iCloud file shows but is not on the phone? Download it fully in Files first, then pick it here',
+  btn_chat: '💬 Chat', chatTitle: 'Session chat',
+  chatPh: 'Text or link from phone…', chatSend: 'Send',
+  chatPcPh: 'Reply from PC…', chatEmpty: 'Quiet so far — write from your phone, it lands here and as a note in the folder',
+  chatNote: 'Lives while the QR lives. Every message is also a note-*.txt in the folder.',
+  chatNew: 'new',
+  shareTitle: '📤 To phone', shareBtn: 'Pick files',
+  shareHint: 'or drag files into this window — the phone grabs them via the link below',
+  dlTitle: '📥 From PC', dlEmpty: 'Nothing shared yet — drop files into the PC window',
+  cleanTitle: 'Session notes', cleanQ: '{n} session notes in the folder. Delete them?',
+  cleanYes: 'Delete & continue', cleanKeep: 'Keep', cleanCancel: 'Cancel',
+  cleanBtn: '🧹 Delete session notes',
 }};
 
 // Общий клиентский код языка. Сервер вставляет window.__INIT_LANG до него.
@@ -1232,6 +1699,9 @@ function applyLang(lang) {
   });
   document.querySelectorAll('[data-i-html]').forEach(function (el) {
     el.innerHTML = t(el.dataset.iHtml);
+  });
+  document.querySelectorAll('[data-i-ph]').forEach(function (el) {
+    el.placeholder = t(el.dataset.iPh);
   });
   document.querySelectorAll('[data-lang-btn]').forEach(function (b) {
     const on = b.dataset.langBtn === __LANG;
@@ -1263,6 +1733,32 @@ function fitWin() {
 function toggleLang() { setLang(__LANG === 'ru' ? 'en' : 'ru'); }
 `;
 const LANG_DICT_JS = 'var LANG_DICT = ' + JSON.stringify(LANG_DICT) + ';';
+
+/* --- «Что нового»: текст пишет автор в whatsnew.ru.txt / whatsnew.en.txt,
+ * окно показывает его один раз на версию (localStorage). Разметка:
+ * **жирный**, строки с «- » — список, пустая строка — абзац. */
+function whatsHtml(raw) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const paras = String(raw || '').replace(/\r/g, '').split(/\n\s*\n/);
+  const out = [];
+  for (const p of paras) {
+    const lines = p.split('\n').map(l => l.trim()).filter(l => l);
+    if (!lines.length) continue;
+    if (lines.every(l => /^[-•]\s+/.test(l)))
+      out.push('<ul style="margin:0 0 6px 20px;padding:0">' +
+        lines.map(l => '<li>' + bold(l.replace(/^[-•]\s+/, '')) + '</li>').join('') + '</ul>');
+    else
+      out.push('<p style="margin:0 0 8px">' + lines.map(bold).join('<br>') + '</p>');
+  }
+  return out.join('');
+}
+
+function whatsnew(lang) {
+  const f = path.join(__dirname, lang === 'en' ? 'whatsnew.en.txt' : 'whatsnew.ru.txt');
+  try { return whatsHtml(fs.readFileSync(f, 'utf8')); }
+  catch (e) { return ''; }
+}
 
 /* ------------------------------------------------------------ обработка */
 
@@ -1374,6 +1870,9 @@ async function ingestChunk(s, cidRaw, iRaw, nRaw, nameRaw, body) {
     u = { tmp, name, n, got: 0, size: 0, ts: Date.now(), pro };
     uploads.set(cid, u);
   }
+  if (body.length === 0) { // iOS iCloud: нулевое тело — файл не скачан на телефон
+    return { code: 500, body: { ok: false, error: 'empty' } };
+  }
   if (i < u.got) return { code: 200, body: { ok: true, chunk: i } }; // дубль (ретрай после обрыва ответа) — уже лежит
   if (i !== u.got || n !== u.n) return { code: 409, body: { ok: false, error: 'Порядок кусков', wait: u.got } };
   u.ts = Date.now();
@@ -1402,6 +1901,103 @@ async function handleChunk(req, res, token, p) {
   catch (e) { return json(res, 500, { ok: false, error: 'Кусок больше 32 МБ' }); }
   const r = await ingestChunk(s, p.get('cid'), p.get('i'), p.get('n'), p.get('name'), body);
   return json(res, r.code, r.body);
+}
+
+/* --- чат сессии: текст/ссылки с телефона на ПК (и обратно) без интернета.
+ * Живёт пока жив QR (30 мин), каждое сообщение дублируется запиской note-*.txt в папку. */
+const MSG_MAX = 2000; // символов в сообщении — ссылка влезет любая, роман — нет
+const MSG_KEEP = 50; // столько храним в сессии, остальное уже лежит записками в папке
+
+function pushMsg(s, from, text) {
+  text = String(text === undefined || text === null ? '' : text).trim().slice(0, MSG_MAX);
+  if (!text) return null;
+  const m = { from: from === 'pc' ? 'pc' : 'phone', text, ts: Date.now() };
+  s.msgs.push(m);
+  if (s.msgs.length > MSG_KEEP) s.msgs.splice(0, s.msgs.length - MSG_KEEP);
+  try {
+    // uniqueName проверяет занятость без префикса — докручиваем счётчик уже с ним
+    const base = uniqueName(s.folder, '.txt').replace(/\.txt$/, '');
+    let fname = 'note-' + base + '.txt', k = 1;
+    while (fs.existsSync(path.join(s.folder, fname))) fname = 'note-' + base + ' (' + (k++) + ').txt';
+    fs.writeFileSync(path.join(s.folder, fname), text, 'utf8');
+    s.files.push(fname);
+  } catch (e) { /* записка не влезла — чат всё равно живёт */ }
+  return m;
+}
+
+async function handleMsg(req, res, token, from) {
+  const s = sessions.get(token);
+  if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
+  if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
+  let body;
+  try { body = await readBody(req, 16 * 1024); }
+  catch (e) { return json(res, 500, { ok: false, error: 'Слишком длинное' }); }
+  let text = '';
+  try { text = (JSON.parse(body.toString('utf8') || '{}').text) || ''; }
+  catch (e) { text = body.toString('utf8'); }
+  const m = pushMsg(s, from, text);
+  if (!m) return json(res, 400, { ok: false, error: 'Пусто' });
+  return json(res, 200, { ok: true, n: s.msgs.length });
+}
+
+/* --- обратная передача ПК → телефон (1.2.0): файлы из окна/папки забираются
+ * телефоном по ссылке. Раздаём ТОЛЬКО зарегистрированное в s.share (индексная
+ * выдача — проход по путям невозможен конструктивно). Мёртвое вместе с сессией. */
+const SHARE_MAX_FILES = 50;
+
+function shareAdd(s, filePath) {
+  let st;
+  try { st = fs.statSync(filePath); } catch (e) { return null; }
+  if (!st.isFile()) return null;
+  const pro = isPro();
+  const maxSize = pro ? 10 * 1024 * 1024 * 1024 : 60 * 1024 * 1024;
+  if (st.size > maxSize || s.share.length >= SHARE_MAX_FILES) return null;
+  const abs = path.resolve(filePath);
+  if (s.share.some(e => e.path === abs)) return null; // уже раздаём
+  const e = { id: 's' + (s.shareSeq++), name: path.basename(abs).slice(0, 120) || 'file', path: abs, size: st.size };
+  s.share.push(e);
+  return e;
+}
+
+// мелкие типы для отдачи; остальное — octet-stream (телефон всё равно качает в «Файлы»)
+function shareMime(name) {
+  const ext = path.extname(name || '').toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.gif') return 'image/gif';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.mp4') return 'video/mp4';
+  if (ext === '.pdf') return 'application/pdf';
+  if (ext === '.txt') return 'text/plain; charset=utf-8';
+  return 'application/octet-stream';
+}
+
+function shareVisible(s) {
+  // free-тариф: картинки — всем, остальное только Pro (зеркало правил заливки)
+  if (isPro()) return s.share;
+  return s.share.filter(e => isImageExt(path.extname(e.name).toLowerCase()));
+}
+
+function sharePub(list) {
+  return list.map(e => ({ id: e.id, name: e.name, size: e.size }));
+}
+
+async function handleGet(req, res, token, id) {
+  const s = sessions.get(token);
+  if (!s) return json(res, 404, { ok: false, error: 'QR устарел' });
+  if (Date.now() - s.created > TOKEN_TTL) { sessions.delete(token); return json(res, 404, { ok: false, error: 'QR устарел' }); }
+  const e = s.share.find(x => x.id === id);
+  if (!e) return json(res, 404, { ok: false, error: 'Нет такого файла' });
+  let st;
+  try { st = fs.statSync(e.path); if (!st.isFile()) throw new Error('gone'); }
+  catch (err) { return json(res, 404, { ok: false, error: 'Файл убран' }); }
+  // Range не поддерживаем (v1: скачать в «Файлы», а не стримить) — честный 200 целиком
+  res.writeHead(200, {
+    'Content-Type': shareMime(e.name),
+    'Content-Length': st.size,
+    'Content-Disposition': 'attachment; filename="' + encodeURIComponent(e.name).replace(/'/g, '%27') + '"',
+  });
+  fs.createReadStream(e.path).on('error', () => { try { res.destroy(); } catch (err2) {} }).pipe(res);
 }
 
 async function handleUpload(req, res, token) {
@@ -1461,6 +2057,11 @@ async function handleUpload(req, res, token) {
     stream.pipe(out);
     pending = new Promise(resolve => out.on('finish', async () => {
       if (failed) { try { fs.rmSync(tmp, { force: true }); } catch (e) {} return resolve(); }
+      if (fs.statSync(tmp).size === 0) { // iOS iCloud: файл виден в пикере, но байты не скачаны — грузить нечего
+        try { fs.rmSync(tmp, { force: true }); } catch (e) {}
+        failed = 'empty';
+        return resolve();
+      }
       const r = await finishUpload(s, tmp, info.filename || 'photo.jpg');
       if (r.saved) saved = r.saved; else failed = r.failed;
       resolve();
@@ -1585,7 +2186,50 @@ async function handleRequest(req, res) {
     }
     if (url.pathname === '/api/status') {
       if (!s) return json(res, 404, { ok: false });
-      return json(res, 200, { ok: true, received: s.received, folder: s.folder });
+      return json(res, 200, { ok: true, received: s.received, folder: s.folder, msgN: s.msgs.length, msgs: s.msgs.slice(-50), share: sharePub(s.share), notes: s.files.filter(f => f.startsWith('note-')).length });
+    }
+    if (url.pathname === '/api/share' && req.method === 'POST') {
+      // окно QR: кнопка/перетаскивание. Папки — обратно в старое поведение (QR для неё), файлы — в раздачу.
+      if (!s) return json(res, 404, { ok: false });
+      let paths = [];
+      try { paths = JSON.parse((await readBody(req, 64 * 1024)).toString('utf8') || '{}').paths || []; }
+      catch (e) { paths = []; }
+      let folder = null;
+      const added = [];
+      for (const p of (Array.isArray(paths) ? paths : []).slice(0, 20)) {
+        const abs = String(p || '');
+        let st = null;
+        try { st = fs.statSync(abs); } catch (e) { continue; }
+        if (st.isDirectory()) { if (!folder && resolveFolder(abs)) folder = resolveFolder(abs); continue; }
+        const e2 = shareAdd(s, abs);
+        if (e2) added.push({ id: e2.id, name: e2.name, size: e2.size });
+      }
+      return json(res, 200, { ok: true, added, folder, share: sharePub(s.share) });
+    }
+    if (url.pathname === '/api/cleannotes' && req.method === 'POST') {
+      // чистка записок сессии с диска (только note-*.txt, созданные ей же — чужое не трогаем)
+      if (!s) return json(res, 404, { ok: false });
+      let removed = 0;
+      const keep = [];
+      for (const f of s.files) {
+        if (f.startsWith('note-') && f.endsWith('.txt')) {
+          try { fs.rmSync(path.join(s.folder, f), { force: true }); removed++; }
+          catch (e) { keep.push(f); }
+        } else keep.push(f);
+      }
+      s.files = keep;
+      return json(res, 200, { ok: true, removed });
+    }
+    if (url.pathname === '/api/unshare' && req.method === 'POST') {      if (!s) return json(res, 404, { ok: false });
+      let id = '';
+      try { id = String(JSON.parse((await readBody(req, 4 * 1024)).toString('utf8') || '{}').id || ''); }
+      catch (e) {}
+      s.share = s.share.filter(e => e.id !== id);
+      return json(res, 200, { ok: true, share: sharePub(s.share) });
+    }
+    if (url.pathname === '/api/msg' && req.method === 'POST') {
+      // ПК → телефон: окно QR шлёт через localhost, телефон забирает опросом ?msgs
+      return handleMsg(req, res, q, 'pc');
     }
     if (url.pathname === '/api/close') {
       if (s) sessions.delete(q);
@@ -1716,13 +2360,30 @@ background:var(--brand);color:var(--brand-ink);cursor:pointer}button:active{tran
 <div style="text-align:right;margin-top:14px"><button id="helpOk" style="font-size:14px" data-i="btn_ok">Понятно</button></div>
 </div>
 </div>
+<div id="wnOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,18,40,.5);align-items:center;justify-content:center;padding:24px;z-index:20">
+<div style="background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);max-width:400px;width:100%;padding:24px 22px;text-align:left;max-height:calc(100vh - 48px);overflow:auto">
+<div style="font-size:17px;font-weight:800;margin-bottom:12px"><span data-i="whatsTitle">Что нового</span> · v${APP_VERSION}</div>
+<div id="wnBodyRu" style="font-size:14px;line-height:1.65">${whatsnew('ru')}</div>
+<div id="wnBodyEn" style="display:none;font-size:14px;line-height:1.65">${whatsnew('en')}</div>
+<div style="text-align:right;margin-top:14px"><button id="wnOk" style="font-size:14px" data-i="btn_ok">Понятно</button></div>
+</div>
+</div>
 <script>
 (function(){function s(){var d=document.documentElement.dataset.theme==='dark';document.getElementById('themeBtn').textContent=d?'☀️':'🌙';}
 document.getElementById('themeBtn').onclick=function(){var d=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=d?'dark':'light';try{localStorage.setItem('pixport-theme',d?'dark':'light');}catch(e){}s();};s();
 var ov=document.getElementById('helpOverlay');
 document.getElementById('helpLink').onclick=function(){ov.style.display='flex';};
 document.getElementById('helpOk').onclick=function(){ov.style.display='none';};
-ov.onclick=function(e){if(e.target===ov)ov.style.display='none';};})();
+ov.onclick=function(e){if(e.target===ov)ov.style.display='none';};
+(function(){var k='pixport-wn-seen';var seen=null;try{seen=localStorage.getItem(k);}catch(e){}
+var wov=document.getElementById('wnOverlay');
+var ru=document.getElementById('wnBodyRu'),en=document.getElementById('wnBodyEn');
+var isEn=(typeof __LANG!=='undefined'&&__LANG==='en');
+if(ru&&en){ru.style.display=isEn?'none':'';en.style.display=isEn?'':'none';}
+function whide(){wov.style.display='none';try{localStorage.setItem(k,'${APP_VERSION}');}catch(e){}}
+document.getElementById('wnOk').onclick=whide;
+wov.onclick=function(e){if(e.target===wov)whide();};
+if(seen!=='${APP_VERSION}')wov.style.display='flex';})();})();
 </script>
 <script>${LANG_DICT_JS}</script>
 <script>${LANG_JS}</script>
@@ -1913,6 +2574,23 @@ if (window.pixport) {
     if (!s) {
       res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end('<p style="font-family:sans-serif;padding:40px">Ссылка устарела. Покажи QR на компьютере ещё раз.</p>');
+    }
+    if (req.method === 'GET' && url.searchParams.has('ping')) return json(res, 200, { ok: true, ts: Date.now() });
+    if (req.method === 'GET' && url.searchParams.has('state')) {
+      const u = uploads.get(String(url.searchParams.get('cid') || ''));
+      if (!u) return json(res, 200, { ok: false, got: 0 });
+      return json(res, 200, { ok: true, got: u.got, n: u.n });
+    }
+    if (req.method === 'POST' && url.searchParams.has('msg')) return handleMsg(req, res, q, 'phone');
+    if (req.method === 'GET' && url.searchParams.has('msgs')) {
+      const since = Math.max(0, parseInt(url.searchParams.get('since') || '0', 10) || 0);
+      return json(res, 200, { ok: true, msgs: s.msgs.slice(since), n: s.msgs.length });
+    }
+    if (req.method === 'GET' && url.searchParams.has('share')) {
+      return json(res, 200, { ok: true, items: sharePub(shareVisible(s)) });
+    }
+    if (req.method === 'GET' && url.searchParams.has('get')) {
+      return handleGet(req, res, q, String(url.searchParams.get('get') || ''));
     }
     if (req.method === 'POST') return handleUpload(req, res, q);
     // no-store: телефон не должен подсовывать закэшированную страницу старой версии

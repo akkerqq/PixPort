@@ -1,0 +1,7 @@
+**Session chat** — text and links from phone to PC with no internet, right from the upload page. Telegram-like look, everything duplicated as notes into the folder.
+
+**PC to phone sharing** — drop files into the app window, a “From PC” section appears on the phone.
+
+**Folder hygiene** — we ask before a new QR whether to delete chat notes. Plus a manual cleanup button.
+
+**Resilience** — resume after page reload, a queue that survives single-file failures, faster on clean Wi-Fi. Plus diagnostics: server ping and copy-log button.
