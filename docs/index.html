@@ -129,6 +129,7 @@ footer a{color:var(--muted);margin-right:16px}
 <button class="payopt" onclick="paySoon('sbp')">💳 СБП<small>QR или приложение банка</small></button>
 <button class="payopt" onclick="paySoon('card')">💷 Банковская карта<small>Visa, МИР и другие</small></button>
 <p class="paystatus" id="paySoon"></p>
+<div id="payTicket" style="display:none;margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:14px"></div>
 <button class="payclose" onclick="closePay()">Закрыть</button>
 </div>
 </div>
@@ -143,10 +144,27 @@ function payValid(){
   cd.style.borderColor=cdOk?'var(--line)':'#c00'; if(!cdOk)ok=false;
   return ok?{email:em.value.trim(),code:cd.value.trim()}:null;
 }
-function paySoon(){
-  var v=payValid(), st=document.getElementById('paySoon');
+function paySoon(method){
+  var v=payValid(), st=document.getElementById('paySoon'), tk=document.getElementById('payTicket');
+  tk.style.display='none';
   if(!v){st.style.display='block';st.textContent='Заполните почту и код из приложения — без них ключ не выдать.';return;}
-  st.style.display='block';st.textContent='Оплата этим способом будет скоро доступна. Ключ придёт на '+v.email+'.';
+  var d=new Date(), num='PP-'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+Math.random().toString(36).slice(2,6).toUpperCase();
+  var how=method==='card'?'Банковская карта':'СБП';
+  st.style.display='block';st.textContent='Оплата этим способом будет скоро доступна.';
+  tk.dataset.order='Заказ PixPort Pro\nНомер: '+num+'\nСумма: 690 ₽\nСпособ: '+how+'\nПочта: '+v.email+'\nКод ПК: '+v.code;
+  tk.innerHTML='';
+  var t1=document.createElement('div');t1.innerHTML='<b>Ваш заказ '+num+'</b> · 690 ₽ · '+how;
+  var t2=document.createElement('div');t2.style.color='var(--muted)';t2.style.margin='4px 0 8px';t2.textContent='Почта: '+v.email+' · Код ПК: '+v.code;
+  var t3=document.createElement('div');t3.style.marginBottom='8px';t3.textContent='Скопируйте данные и отправьте их в поддержку — ключ придёт на почту.';
+  var cp=document.createElement('button');cp.className='btn gold';cp.style.border='0';cp.style.cursor='pointer';cp.style.fontSize='15px';cp.style.padding='10px 20px';cp.textContent='Скопировать данные заказа';
+  cp.onclick=function(){
+    var txt=tk.dataset.order;
+    function done(){cp.textContent='✓ Скопировано';}
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(done).catch(function(){});
+    else{var ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');}catch(e){}ta.remove();done();}
+  };
+  tk.appendChild(t1);tk.appendChild(t2);tk.appendChild(t3);tk.appendChild(cp);
+  tk.style.display='block';
 }
 </script>
 </body>
